@@ -1,0 +1,527 @@
+import express, { Request, Response } from 'express';
+import path from 'path';
+import { createServer as createViteServer } from 'vite';
+import { INITIAL_DEVICES, INITIAL_AUTOMATIONS, generateInitialTelemetryHistory, INITIAL_LOGS } from './src/data/initialData';
+import { IoTDevice, VirtualPinId, TelemetryPoint, DeviceLog, AutomationRule } from './src/types';
+
+// In-memory persistent database across live session
+let devices: IoTDevice[] = JSON.parse(JSON.stringify(INITIAL_DEVICES));
+let automations: AutomationRule[] = JSON.parse(JSON.stringify(INITIAL_AUTOMATIONS));
+let telemetryHistory: TelemetryPoint[] = generateInitialTelemetryHistory(40);
+let logs: DeviceLog[] = JSON.parse(JSON.stringify(INITIAL_LOGS));
+let isSimulating = true;
+let sseClients: Response[] = [];
+
+// Helper to broadcast state to all open SSE connections
+function broadcastSSE(eventType: string, data: any) {
+  const payload = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
+  sseClients.forEach((client, idx) => {
+    try {
+      client.write(payload);
+    } catch {
+      sseClients.splice(idx, 1);
+    }
+  });
+}
+
+// Evaluate automation rules
+function evaluateAutomations(device: IoTDevice) {
+  automations.forEach(rule => {
+    if (!rule.enabled) return;
+    const sourcePinDef = device.pins[rule.sourcePin];
+    if (!sourcePinDef) return;
+
+    const currentVal = Number(sourcePinDef.value);
+    let triggered = false;
+
+    switch (rule.condition) {
+      case 'gt': triggered = currentVal > rule.threshold; break;
+      case 'gte': triggered = currentVal >= rule.threshold; break;
+      case 'lt': triggered = currentVal < rule.threshold; break;
+      case 'lte': triggered = currentVal <= rule.threshold; break;
+      case 'eq': triggered = Math.abs(currentVal - rule.threshold) < 0.01; break;
+    }
+
+    if (triggered) {
+      const targetPinDef = device.pins[rule.targetPin];
+      if (targetPinDef && targetPinDef.value !== rule.targetValue) {
+        targetPinDef.value = rule.targetValue;
+        rule.lastTriggered = new Date().toLocaleTimeString();
+
+        const logMsg: DeviceLog = {
+          id: `auto_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          timestamp: new Date().toLocaleTimeString(),
+          level: 'WARN',
+          deviceId: device.id,
+          message: `[AUTOMATION TRIGGERED] ${rule.name} -> Set ${rule.targetPin} = ${rule.targetValue}`,
+          messageKhmer: `ក្បួនស្វ័យប្រវត្តបានបញ្ជា: ${rule.nameKhmer} -> កំណត់ ${rule.targetPin} = ${rule.targetValue}`,
+          source: 'AUTOMATION'
+        };
+        logs.unshift(logMsg);
+        if (logs.length > 200) logs.pop();
+
+        broadcastSSE('device_update', { deviceId: device.id, device });
+        broadcastSSE('log_added', logMsg);
+        broadcastSSE('automation_triggered', { ruleId: rule.id, lastTriggered: rule.lastTriggered });
+      }
+    }
+  });
+}
+
+// Background simulation ticker for realistic sensor physics & ESP32 emulation
+setInterval(() => {
+  if (!isSimulating || devices.length === 0) return;
+
+  devices.forEach(dev => {
+    dev.lastSeen = 'Just now';
+    dev.status = 'online';
+
+    // 1. Alert System simulation
+    if (dev.templateId === 'TMPL_ALERT_SYSTEM') {
+      if (dev.pins.V0) {
+        let coVal = Number(dev.pins.V0.value);
+        coVal += Math.floor((Math.random() - 0.49) * 8);
+        dev.pins.V0.value = Math.max(300, Math.min(495, coVal));
+      }
+      if (dev.pins.V1) {
+        let press = Number(dev.pins.V1.value);
+        press += (Math.random() - 0.5) * 0.15;
+        dev.pins.V1.value = Number(Math.max(98.0, Math.min(108.0, press)).toFixed(2));
+      }
+      if (dev.pins.V2) {
+        let water = Number(dev.pins.V2.value);
+        water += Math.round((Math.random() - 0.5) * 2);
+        dev.pins.V2.value = Math.max(5, Math.min(95, water));
+      }
+    }
+
+    // 2. Smart Bin simulation
+    if (dev.templateId === 'TMPL_SMART_BIN') {
+      if (dev.pins.V1) {
+        let dry = Number(dev.pins.V1.value);
+        if (Math.random() > 0.7) dry = Math.min(100, Math.max(10, dry + (Math.random() > 0.5 ? 1 : -1)));
+        dev.pins.V1.value = dry;
+      }
+      if (dev.pins.V3) {
+        let wet = Number(dev.pins.V3.value);
+        if (Math.random() > 0.8) wet = Math.min(100, Math.max(5, wet + (Math.random() > 0.5 ? 1 : -1)));
+        dev.pins.V3.value = wet;
+      }
+      if (dev.pins.V7) {
+        let odor = Number(dev.pins.V7.value);
+        odor += Math.round((Math.random() - 0.48) * 4);
+        dev.pins.V7.value = Math.max(60, Math.min(350, odor));
+      }
+    }
+
+    // 3. Smart Irrigation simulation
+    if (dev.templateId === 'TMPL_SMART_IRRIGATION') {
+      const pumpOn = Number(dev.pins.V0?.value) === 1;
+      if (dev.pins.V1) {
+        let soil = Number(dev.pins.V1.value);
+        if (pumpOn) {
+          soil = Math.min(100, soil + 0.5);
+        } else {
+          soil = Math.max(20, soil - 0.08);
+        }
+        dev.pins.V1.value = Number(soil.toFixed(1));
+      }
+      if (dev.pins.V2) {
+        let temp = Number(dev.pins.V2.value);
+        temp += (Math.random() - 0.49) * 0.12;
+        dev.pins.V2.value = Number(Math.max(22, Math.min(38, temp)).toFixed(1));
+      }
+      if (dev.pins.V6) {
+        let hum = Number(dev.pins.V6.value);
+        hum += (Math.random() - 0.5) * 0.25;
+        dev.pins.V6.value = Number(Math.max(40, Math.min(90, hum)).toFixed(1));
+      }
+      if (dev.pins.V4) {
+        let light = Number(dev.pins.V4.value);
+        light = Math.max(2, Math.min(100, light + Math.round((Math.random() - 0.5) * 2)));
+        dev.pins.V4.value = light;
+      }
+    }
+
+    // 4. Traffic Light & Parking simulation
+    if (dev.templateId === 'TMPL_TRAFFIC_PARKING') {
+      if (dev.pins.V1 && Math.random() > 0.75) {
+        let spots = Number(dev.pins.V1.value);
+        spots = Math.max(0, Math.min(20, spots + (Math.random() > 0.5 ? 1 : -1)));
+        dev.pins.V1.value = spots;
+      }
+      if (dev.pins.V2 && Math.random() > 0.7) {
+        let carA = Number(dev.pins.V2.value);
+        carA = Math.max(0, Math.min(15, carA + (Math.random() > 0.5 ? 1 : -1)));
+        dev.pins.V2.value = carA;
+      }
+      if (dev.pins.V3 && Math.random() > 0.7) {
+        let carB = Number(dev.pins.V3.value);
+        carB = Math.max(0, Math.min(15, carB + (Math.random() > 0.5 ? 1 : -1)));
+        dev.pins.V3.value = carB;
+      }
+    }
+
+    evaluateAutomations(dev);
+  });
+
+  const primaryDev = devices[0];
+  if (primaryDev) {
+    const now = Date.now();
+    const newPoint: TelemetryPoint = {
+      timestamp: now,
+      timeStr: new Date(now).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      temperature: Number(devices.find(d => d.templateId === 'TMPL_SMART_IRRIGATION')?.pins.V2?.value || 28.5),
+      humidity: Number(devices.find(d => d.templateId === 'TMPL_SMART_IRRIGATION')?.pins.V6?.value || 68.0),
+      gasCo: Number(devices.find(d => d.templateId === 'TMPL_ALERT_SYSTEM')?.pins.V0?.value || 465),
+      soilMoisture: Number(devices.find(d => d.templateId === 'TMPL_SMART_IRRIGATION')?.pins.V1?.value || 92),
+      fanSpeed: Number(primaryDev.pins.V4?.value || 75),
+      relay1: Number(primaryDev.pins.V0?.value || 1),
+      relay2: Number(primaryDev.pins.V3?.value || 0),
+    };
+
+    telemetryHistory.push(newPoint);
+    if (telemetryHistory.length > 300) {
+      telemetryHistory.shift();
+    }
+
+    broadcastSSE('telemetry_tick', { point: newPoint, deviceId: primaryDev.id, pins: primaryDev.pins });
+  }
+}, 2000);
+
+async function startServer() {
+  const app = express();
+  const PORT = 3000;
+
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+
+  // CORS for external ESP32 / Arduino requests
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-blynk-token');
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(200);
+      return;
+    }
+    next();
+  });
+
+  // Health check
+  app.get('/api/health', (_req: Request, res: Response) => {
+    res.json({ status: 'ok', uptime: process.uptime(), time: new Date().toISOString() });
+  });
+
+  // Server-Sent Events (SSE) for Real-time browser updates
+  app.get('/api/iot/events', (req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    // Send initial handshake
+    res.write(`event: connected\ndata: ${JSON.stringify({ message: 'Connected to IoT Cloud Stream', timestamp: Date.now() })}\n\n`);
+    sseClients.push(res);
+
+    req.on('close', () => {
+      sseClients = sseClients.filter(c => c !== res);
+    });
+  });
+
+  // GET /api/iot/devices -> List devices
+  app.get('/api/iot/devices', (_req: Request, res: Response) => {
+    res.json({ success: true, devices });
+  });
+
+  // GET /api/iot/device/:token -> Get single device state by token or id
+  app.get('/api/iot/device/:token', (req: Request, res: Response) => {
+    const tokenOrId = req.params.token;
+    const device = devices.find(d => d.authToken === tokenOrId || d.id === tokenOrId);
+    if (!device) {
+      res.status(404).json({ success: false, error: 'Device not found' });
+      return;
+    }
+    res.json({ success: true, device });
+  });
+
+  // BLYNK & REST COMPLIANT UPDATE ENDPOINT:
+  // Can be called via GET query: /api/iot/update?token=xxx&v0=25.4&v1=68&v2=1
+  // Or GET /api/iot/update?token=xxx&pin=v0&value=25.4
+  // Or POST JSON { token, pins: { V0: 25.4, V1: 68 }, rssi: -60, ip: "192.168.1.100" }
+  const handleIotUpdate = (req: Request, res: Response) => {
+    const query = req.query as Record<string, string>;
+    const body = (req.body || {}) as Record<string, any>;
+
+    const token = (query.token || body.token || query.auth || body.auth) as string;
+    if (!token) {
+      res.status(400).json({ success: false, error: 'Missing auth token. Pass ?token=YOUR_TOKEN' });
+      return;
+    }
+
+    const device = devices.find(d => d.authToken === token || d.id === token);
+    if (!device) {
+      res.status(401).json({ success: false, error: 'Invalid Auth Token or unregistered device' });
+      return;
+    }
+
+    device.lastSeen = 'Just now';
+    device.status = 'online';
+    if (query.rssi || body.rssi) device.rssi = Number(query.rssi || body.rssi);
+    if (query.ip || body.ip) device.ipAddress = String(query.ip || body.ip);
+
+    let updatedPinsList: string[] = [];
+
+    // Case 1: single pin update (?pin=v0&value=28.5)
+    if (query.pin && query.value !== undefined) {
+      const pinKey = (query.pin.toUpperCase()) as VirtualPinId;
+      if (device.pins[pinKey]) {
+        device.pins[pinKey].value = isNaN(Number(query.value)) ? query.value : Number(query.value);
+        updatedPinsList.push(`${pinKey}=${query.value}`);
+      }
+    }
+
+    // Case 2: multi-pin query (?v0=28.5&v1=65&v5=320)
+    Object.keys(query).forEach(k => {
+      const upper = k.toUpperCase() as VirtualPinId;
+      if (upper.startsWith('V') && device.pins[upper]) {
+        const val = isNaN(Number(query[k])) ? query[k] : Number(query[k]);
+        device.pins[upper].value = val;
+        updatedPinsList.push(`${upper}=${val}`);
+      }
+    });
+
+    // Case 3: JSON body pins { V0: 28.5, V1: 65 }
+    if (body.pins && typeof body.pins === 'object') {
+      Object.keys(body.pins).forEach(k => {
+        const upper = k.toUpperCase() as VirtualPinId;
+        if (device.pins[upper]) {
+          const val = isNaN(Number(body.pins[k])) ? body.pins[k] : Number(body.pins[k]);
+          device.pins[upper].value = val;
+          updatedPinsList.push(`${upper}=${val}`);
+        }
+      });
+    }
+
+    // Direct body keys (e.g. { v0: 25.4 })
+    Object.keys(body).forEach(k => {
+      const upper = k.toUpperCase() as VirtualPinId;
+      if (upper.startsWith('V') && device.pins[upper]) {
+        const val = isNaN(Number(body[k])) ? body[k] : Number(body[k]);
+        device.pins[upper].value = val;
+        updatedPinsList.push(`${upper}=${val}`);
+      }
+    });
+
+    // Evaluate automations
+    evaluateAutomations(device);
+
+    // Create log message
+    if (updatedPinsList.length > 0) {
+      const logEntry: DeviceLog = {
+        id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        timestamp: new Date().toLocaleTimeString(),
+        level: 'DATA',
+        deviceId: device.id,
+        message: `[ESP32 -> CLOUD] Synced ${updatedPinsList.join(', ')}`,
+        messageKhmer: `ទិន្នន័យពី ESP32 បាន Sync: ${updatedPinsList.join(', ')}`,
+        source: 'ESP32_FIRMWARE'
+      };
+      logs.unshift(logEntry);
+      if (logs.length > 200) logs.pop();
+      broadcastSSE('log_added', logEntry);
+    }
+
+    // Broadcast full updated device to frontend
+    broadcastSSE('device_update', { deviceId: device.id, device });
+
+    // Respond OK
+    res.json({
+      success: true,
+      message: 'Pins updated successfully',
+      updated: updatedPinsList,
+      timestamp: Date.now()
+    });
+  };
+
+  app.get('/api/iot/update', handleIotUpdate);
+  app.post('/api/iot/update', handleIotUpdate);
+
+  // GET /api/iot/get?token=xxx&pin=v2 -> Microcontroller reads a single pin (e.g. Relay ON/OFF status)
+  app.get('/api/iot/get', (req: Request, res: Response) => {
+    const token = (req.query.token || req.query.auth) as string;
+    const pin = (req.query.pin || req.query.v) as string;
+
+    if (!token || !pin) {
+      res.status(400).send('ERR_PARAM');
+      return;
+    }
+
+    const device = devices.find(d => d.authToken === token || d.id === token);
+    if (!device) {
+      res.status(404).send('ERR_AUTH');
+      return;
+    }
+
+    const upper = pin.toUpperCase() as VirtualPinId;
+    const pinDef = device.pins[upper];
+    if (!pinDef) {
+      res.status(404).send('ERR_PIN');
+      return;
+    }
+
+    // Return pure scalar for ultra-lightweight ESP32 reading
+    res.setHeader('Content-Type', 'text/plain');
+    res.send(String(pinDef.value));
+  });
+
+  // GET /api/iot/all?token=xxx -> Microcontroller reads all pin states at once
+  app.get('/api/iot/all', (req: Request, res: Response) => {
+    const token = (req.query.token || req.query.auth) as string;
+    if (!token) {
+      res.status(400).json({ error: 'Missing token' });
+      return;
+    }
+
+    const device = devices.find(d => d.authToken === token || d.id === token);
+    if (!device) {
+      res.status(404).json({ error: 'Device not found' });
+      return;
+    }
+
+    const pinValues: Record<string, any> = {};
+    Object.keys(device.pins).forEach(p => {
+      pinValues[p] = device.pins[p as VirtualPinId].value;
+    });
+
+    res.json({
+      success: true,
+      deviceId: device.id,
+      pins: pinValues,
+      timestamp: Date.now()
+    });
+  });
+
+  // GET /api/iot/history -> Telemetry chart data points
+  app.get('/api/iot/history', (req: Request, res: Response) => {
+    const range = (req.query.range as string) || 'live';
+    let data = [...telemetryHistory];
+
+    if (range === 'live') {
+      data = data.slice(-30);
+    } else if (range === '1h') {
+      data = data.slice(-60);
+    } else if (range === '6h') {
+      data = data.slice(-120);
+    }
+
+    res.json({ success: true, count: data.length, points: data });
+  });
+
+  // GET /api/iot/logs -> System Logs
+  app.get('/api/iot/logs', (_req: Request, res: Response) => {
+    res.json({ success: true, logs });
+  });
+
+  // POST /api/iot/logs/clear -> Clear terminal logs
+  app.post('/api/iot/logs/clear', (_req: Request, res: Response) => {
+    logs = [];
+    broadcastSSE('logs_cleared', {});
+    res.json({ success: true });
+  });
+
+  // POST /api/iot/automations -> Save automation rules
+  app.get('/api/iot/automations', (_req: Request, res: Response) => {
+    res.json({ success: true, automations });
+  });
+
+  app.post('/api/iot/automations', (req: Request, res: Response) => {
+    const newRules = req.body.automations as AutomationRule[];
+    if (Array.isArray(newRules)) {
+      automations = newRules;
+      broadcastSSE('automations_updated', automations);
+      res.json({ success: true, automations });
+      return;
+    }
+    res.status(400).json({ success: false, error: 'Expected array of automations' });
+  });
+
+  // POST /api/iot/simulate/toggle -> Toggle simulation
+  app.post('/api/iot/simulate/toggle', (req: Request, res: Response) => {
+    if (req.body.enabled !== undefined) {
+      isSimulating = Boolean(req.body.enabled);
+    } else {
+      isSimulating = !isSimulating;
+    }
+    broadcastSSE('simulation_status', { isSimulating });
+    res.json({ success: true, isSimulating });
+  });
+
+  // POST /api/iot/device/create -> Add custom device
+  app.post('/api/iot/device/create', (req: Request, res: Response) => {
+    const { name, nameKhmer, templateId, orgId } = req.body;
+    const newId = `dev_esp32_${Date.now().toString(36)}`;
+    const randomHex = Math.random().toString(16).substring(2, 8);
+    const newAuthToken = `blynk_esp32_${randomHex}_${Date.now().toString(36)}`;
+
+    const newDevice: IoTDevice = {
+      id: newId,
+      name: name || 'ESP32 Custom Node',
+      nameKhmer: nameKhmer || 'ESP32 ឧបករណ៍ថ្មី',
+      authToken: newAuthToken,
+      orgId: orgId || 'ORG-KHMER-IOT-01',
+      templateId: templateId || 'TMPL_GENERIC_ESP32',
+      status: 'online',
+      ipAddress: `192.168.1.${Math.floor(Math.random() * 150 + 100)}`,
+      macAddress: `24:6F:28:${randomHex.slice(0, 2).toUpperCase()}:${randomHex.slice(2, 4).toUpperCase()}:${randomHex.slice(4, 6).toUpperCase()}`,
+      rssi: -55 - Math.floor(Math.random() * 20),
+      firmwareVersion: 'v2.4.1',
+      hardware: 'ESP32-WROOM-32',
+      lastSeen: 'Just created',
+      lastUpdated: '1 minute ago',
+      owner: 'Admin (You)',
+      location: 'Custom Station',
+      pins: JSON.parse(JSON.stringify(INITIAL_DEVICES[0].pins))
+    };
+
+    devices.push(newDevice);
+    broadcastSSE('device_created', newDevice);
+    res.json({ success: true, device: newDevice });
+  });
+
+  // POST /api/iot/device/regenerate-token
+  app.post('/api/iot/device/regenerate-token', (req: Request, res: Response) => {
+    const { deviceId } = req.body;
+    const device = devices.find(d => d.id === deviceId);
+    if (!device) {
+      res.status(404).json({ error: 'Device not found' });
+      return;
+    }
+    const randomHex = Math.random().toString(16).substring(2, 10);
+    device.authToken = `blynk_esp32_${randomHex}_${Date.now().toString(36)}`;
+    broadcastSSE('device_update', { deviceId: device.id, device });
+    res.json({ success: true, authToken: device.authToken });
+  });
+
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`⚡ Blynk IoT Cloud Console Server running at http://0.0.0.0:${PORT}`);
+  });
+}
+
+startServer();
