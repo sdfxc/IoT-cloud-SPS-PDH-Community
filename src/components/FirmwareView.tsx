@@ -1580,9 +1580,30 @@ void setup() {
   server.begin();
 }
 
+// Forward real readings to Web Cloud Dashboard if connected to Wi-Fi
+unsigned long lastCloudPush = 0;
+void pushDataToCloud() {
+  if (WiFi.status() == WL_CONNECTED && millis() - lastCloudPush > 1000) {
+    lastCloudPush = millis();
+    HTTPClient http;
+    float dist = getDistance();
+    int level = calculateLevel(dist);
+    int ppm = getMQ135PPM();
+    bool airBad = (ppm >= AIR_THRESHOLD_PPM);
+
+    // Send HTTP GET to cloud backend automatically
+    String cloudUrl = "https://ais-dev-27zugh4jcphio6ahgdc4og-250832150518.asia-southeast1.run.app/api/iot/update?token=tok_c3_smartbin_dual9982&v0=" + String(level) + "&v1=" + String(dist, 1) + "&v4=" + String(ppm) + "&v5=" + String(airBad ? 1 : 0);
+    http.begin(cloudUrl);
+    http.setTimeout(800);
+    http.GET();
+    http.end();
+  }
+}
+
 void loop() {
   dnsServer.processNextRequest();
   server.handleClient();
+  pushDataToCloud();
 }
 `;
 

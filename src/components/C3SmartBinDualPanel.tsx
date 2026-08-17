@@ -205,7 +205,8 @@ export const C3SmartBinDualPanel: React.FC<C3SmartBinDualPanelProps> = ({
               placeholder="192.168.4.1"
               className="bg-slate-900 border border-slate-700 text-amber-300 font-mono text-[11px] px-2 py-0.5 rounded w-28 focus:outline-none focus:border-amber-400 font-bold"
             />
-            <span className={`w-2 h-2 rounded-full ${isDirectConnected ? 'bg-emerald-400 animate-ping' : 'bg-slate-500'}`} title={isDirectConnected ? 'Directly connected to ESP32 IP' : 'Syncing via Cloud Endpoint'} />
+            <span className={`w-2 h-2 rounded-full ${isDirectConnected ? 'bg-emerald-400 animate-ping' : 'bg-emerald-500'}`} title={isDirectConnected ? 'Directly connected to ESP32 IP' : 'Live Syncing via Cloud / Web'} />
+            <span className="text-[10px] font-mono text-emerald-400 font-bold ml-0.5">{lastSyncTime}</span>
           </div>
 
           <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 font-bold transition-all ${
