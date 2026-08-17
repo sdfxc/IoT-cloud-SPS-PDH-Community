@@ -11,6 +11,7 @@ let telemetryHistory: TelemetryPoint[] = generateInitialTelemetryHistory(40);
 let logs: DeviceLog[] = JSON.parse(JSON.stringify(INITIAL_LOGS));
 let isSimulating = true;
 let sseClients: Response[] = [];
+const manualPinOverrides = new Map<string, number>(); // key: deviceId:pin -> timestamp
 
 // Helper to broadcast state to all open SSE connections
 function broadcastSSE(eventType: string, data: any) {
@@ -26,10 +27,18 @@ function broadcastSSE(eventType: string, data: any) {
 
 // Evaluate automation rules
 function evaluateAutomations(device: IoTDevice) {
+  const now = Date.now();
   automations.forEach(rule => {
     if (!rule.enabled) return;
     const sourcePinDef = device.pins[rule.sourcePin];
     if (!sourcePinDef) return;
+
+    // Check if target pin is currently under manual override (within 30 seconds)
+    const overrideKey = `${device.id}:${rule.targetPin}`;
+    const overriddenAt = manualPinOverrides.get(overrideKey);
+    if (overriddenAt && now - overriddenAt < 30000) {
+      return;
+    }
 
     const currentVal = Number(sourcePinDef.value);
     let triggered = false;
@@ -115,7 +124,7 @@ setInterval(() => {
     }
 
     // 3. Smart Irrigation simulation
-    if (dev.templateId === 'TMPL_SMART_IRRIGATION') {
+    if (dev.templateId === 'TMPL_SMART_IRRIGATION' || dev.templateId === 'TMPL6BUNdn49f') {
       const pumpOn = Number(dev.pins.V0?.value) === 1;
       if (dev.pins.V1) {
         let soil = Number(dev.pins.V1.value);
@@ -159,6 +168,38 @@ setInterval(() => {
         let carB = Number(dev.pins.V3.value);
         carB = Math.max(0, Math.min(15, carB + (Math.random() > 0.5 ? 1 : -1)));
         dev.pins.V3.value = carB;
+      }
+    }
+
+    // 5. Smart Lamp & MQ135 Air Quality simulation
+    if (dev.templateId === 'TMPL_SMART_LAMP_MQ135') {
+      if (dev.pins.V1) {
+        let air = Number(dev.pins.V1.value);
+        const fanOn = Number(dev.pins.V3?.value) === 1;
+        if (fanOn) {
+          air = Math.max(80, air - Math.floor(Math.random() * 6 + 2));
+        } else {
+          air = Math.max(50, Math.min(950, air + Math.floor((Math.random() - 0.45) * 6)));
+        }
+        dev.pins.V1.value = air;
+
+        // Auto Hazard siren trigger if above 450 ppm
+        if (dev.pins.V5) {
+          dev.pins.V5.value = air > 450 ? 1 : 0;
+        }
+        if (dev.pins.V9) {
+          dev.pins.V9.value = Math.round(air * 2.2 + 20);
+        }
+      }
+      if (dev.pins.V6) {
+        let t = Number(dev.pins.V6.value);
+        t += (Math.random() - 0.5) * 0.1;
+        dev.pins.V6.value = Number(Math.max(20, Math.min(42, t)).toFixed(1));
+      }
+      if (dev.pins.V7) {
+        let h = Number(dev.pins.V7.value);
+        h += (Math.random() - 0.5) * 0.2;
+        dev.pins.V7.value = Number(Math.max(30, Math.min(95, h)).toFixed(1));
       }
     }
 
@@ -271,6 +312,7 @@ async function startServer() {
     if (query.rssi || body.rssi) device.rssi = Number(query.rssi || body.rssi);
     if (query.ip || body.ip) device.ipAddress = String(query.ip || body.ip);
 
+    const prevV0 = device.pins.V0 ? Number(device.pins.V0.value) : undefined;
     let updatedPinsList: string[] = [];
 
     // Case 1: single pin update (?pin=v0&value=28.5)
@@ -279,6 +321,7 @@ async function startServer() {
       if (device.pins[pinKey]) {
         device.pins[pinKey].value = isNaN(Number(query.value)) ? query.value : Number(query.value);
         updatedPinsList.push(`${pinKey}=${query.value}`);
+        manualPinOverrides.set(`${device.id}:${pinKey}`, Date.now());
       }
     }
 
@@ -289,6 +332,7 @@ async function startServer() {
         const val = isNaN(Number(query[k])) ? query[k] : Number(query[k]);
         device.pins[upper].value = val;
         updatedPinsList.push(`${upper}=${val}`);
+        manualPinOverrides.set(`${device.id}:${upper}`, Date.now());
       }
     });
 
@@ -300,6 +344,7 @@ async function startServer() {
           const val = isNaN(Number(body.pins[k])) ? body.pins[k] : Number(body.pins[k]);
           device.pins[upper].value = val;
           updatedPinsList.push(`${upper}=${val}`);
+          manualPinOverrides.set(`${device.id}:${upper}`, Date.now());
         }
       });
     }
@@ -311,8 +356,24 @@ async function startServer() {
         const val = isNaN(Number(body[k])) ? body[k] : Number(body[k]);
         device.pins[upper].value = val;
         updatedPinsList.push(`${upper}=${val}`);
+        manualPinOverrides.set(`${device.id}:${upper}`, Date.now());
       }
     });
+
+    // Trigger Telegram notification if V0 (Smart_Lamp) was toggled
+    const newV0 = device.pins.V0 ? Number(device.pins.V0.value) : undefined;
+    if (prevV0 !== undefined && newV0 !== undefined && prevV0 !== newV0) {
+      const tgMsg = newV0 === 1 ? '💡 <b>អំពូលកំពុងបើក</b>' : '⭕ <b>អំពូលត្រូវបានបិទ</b>';
+      fetch('https://api.telegram.org/bot8928313450:AAEvmTZMGGDXRJZ-W1ZuE2vc5AlVSQ5oDbY/sendMessage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: '5780071626',
+          text: tgMsg,
+          parse_mode: 'HTML',
+        }),
+      }).catch(err => console.error('[Telegram Notify Error]', err));
+    }
 
     // Evaluate automations
     evaluateAutomations(device);
@@ -347,6 +408,87 @@ async function startServer() {
 
   app.get('/api/iot/update', handleIotUpdate);
   app.post('/api/iot/update', handleIotUpdate);
+
+  // POST /api/iot/chip/command -> Universal Cross-Device Remote Control to Physical Chip
+  app.post('/api/iot/chip/command', async (req: Request, res: Response) => {
+    const { deviceId = 'dev_smart_lamp_mq135', pin = 'V0', value = 1, blynkToken, chipIp, sendTelegram = true } = req.body;
+
+    const device = devices.find(d => d.id === deviceId || d.authToken === blynkToken) || devices[0];
+    const upperPin = (pin.toUpperCase()) as VirtualPinId;
+
+    if (device && device.pins[upperPin]) {
+      const prevVal = device.pins[upperPin].value;
+      device.pins[upperPin].value = Number(value);
+      manualPinOverrides.set(`${device.id}:${upperPin}`, Date.now());
+      device.lastUpdated = 'Just now';
+
+      // Telegram alert on V0 Lamp toggle
+      if (sendTelegram && upperPin === 'V0' && prevVal !== Number(value)) {
+        const tgMsg = Number(value) === 1 ? '💡 <b>អំពូលកំពុងបើក</b>' : '⭕ <b>អំពូលត្រូវបានបិទ</b>';
+        fetch('https://api.telegram.org/bot8928313450:AAEvmTZMGGDXRJZ-W1ZuE2vc5AlVSQ5oDbY/sendMessage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: '5780071626',
+            text: tgMsg,
+            parse_mode: 'HTML',
+          }),
+        }).catch(err => console.error('[Telegram Forward Error]', err));
+      }
+
+      // Add execution log
+      const logEntry: DeviceLog = {
+        id: `cmd_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        timestamp: new Date().toLocaleTimeString(),
+        level: 'INFO',
+        deviceId: device.id,
+        message: `[REMOTE DISPATCH] ${upperPin} -> ${value} sent to physical chip/cloud`,
+        messageKhmer: `បានបញ្ជាពីចម្ងាយ: ${upperPin} -> ${value === 1 ? 'ON (បើក)' : 'OFF (បិទ)'} ទៅកាន់ Chip`,
+        source: 'CLOUD_API'
+      };
+      logs.unshift(logEntry);
+      if (logs.length > 200) logs.pop();
+      broadcastSSE('log_added', logEntry);
+      broadcastSSE('device_update', { deviceId: device.id, device });
+    }
+
+    // Forward to Blynk Cloud REST API if token available
+    let blynkResult: any = null;
+    const tokenToUse = blynkToken || (device ? device.authToken : null);
+    if (tokenToUse && tokenToUse.length > 10) {
+      try {
+        const blynkUrl = `https://blynk.cloud/external/api/update?token=${tokenToUse}&${pin.toLowerCase()}=${value}`;
+        const blynkRes = await fetch(blynkUrl, { method: 'GET' });
+        blynkResult = { ok: blynkRes.ok, status: blynkRes.status };
+      } catch (err: any) {
+        blynkResult = { ok: false, error: err?.message };
+      }
+    }
+
+    // Forward to Local IP if specified
+    let ipResult: any = null;
+    if (chipIp && chipIp.length > 6) {
+      try {
+        const localUrl = `http://${chipIp}/control?pin=${pin.toLowerCase()}&val=${value}`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2500);
+        const ipRes = await fetch(localUrl, { method: 'GET', signal: controller.signal });
+        clearTimeout(timeoutId);
+        ipResult = { ok: ipRes.ok, status: ipRes.status };
+      } catch (err: any) {
+        ipResult = { ok: false, error: 'Local IP unreachable or timeout' };
+      }
+    }
+
+    res.json({
+      success: true,
+      pin: upperPin,
+      value: Number(value),
+      blynkCloud: blynkResult,
+      localIp: ipResult,
+      timestamp: Date.now()
+    });
+  });
 
   // GET /api/iot/get?token=xxx&pin=v2 -> Microcontroller reads a single pin (e.g. Relay ON/OFF status)
   app.get('/api/iot/get', (req: Request, res: Response) => {
@@ -429,6 +571,53 @@ async function startServer() {
     logs = [];
     broadcastSSE('logs_cleared', {});
     res.json({ success: true });
+  });
+
+  // POST /api/telegram/send -> Send real Telegram message using Bot Token & Chat ID
+  app.post('/api/telegram/send', async (req: Request, res: Response) => {
+    const { botToken = '8928313450:AAEvmTZMGGDXRJZ-W1ZuE2vc5AlVSQ5oDbY', chatId = '5780071626', message, parseMode = 'HTML' } = req.body;
+
+    if (!message) {
+      res.status(400).json({ success: false, error: 'Missing message body' });
+      return;
+    }
+
+    try {
+      const tgUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
+      const response = await fetch(tgUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: message,
+          parse_mode: parseMode,
+        }),
+      });
+
+      const data = await response.json() as { ok: boolean; description?: string; result?: any };
+      if (!data.ok) {
+        res.status(400).json({ success: false, error: data.description || 'Telegram API error' });
+        return;
+      }
+
+      // Add log
+      const logEntry: DeviceLog = {
+        id: `tg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        timestamp: new Date().toLocaleTimeString(),
+        level: 'INFO',
+        deviceId: 'dev_smart_lamp_mq135',
+        message: `[TELEGRAM SENT] -> Chat ID ${chatId}: ${message.slice(0, 60)}...`,
+        messageKhmer: `សារ Telegram បានផ្ញើជោគជ័យទៅកាន់ ID ${chatId}`,
+        source: 'TELEGRAM_BOT'
+      };
+      logs.unshift(logEntry);
+      if (logs.length > 200) logs.pop();
+      broadcastSSE('log_added', logEntry);
+
+      res.json({ success: true, result: data.result });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Failed to send Telegram message' });
+    }
   });
 
   // POST /api/iot/automations -> Save automation rules

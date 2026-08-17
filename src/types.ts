@@ -101,9 +101,9 @@ export interface DeviceLog {
   deviceId: string;
   message: string;
   messageKhmer?: string;
-  source: 'ESP32_FIRMWARE' | 'CLOUD_API' | 'AUTOMATION' | 'SIMULATOR';
+  source: 'ESP32_FIRMWARE' | 'CLOUD_API' | 'AUTOMATION' | 'SIMULATOR' | 'TELEGRAM_BOT';
 }
 
 export type TimeFilter = 'live' | '1h' | '6h' | '1d' | '1w' | '1mo';
 
-export type NavigationTab = 'dashboard' | 'devices' | 'analytics' | 'automations' | 'logs' | 'firmware' | 'simulator';
+export type NavigationTab = 'dashboard' | 'widget_builder' | 'devices' | 'analytics' | 'automations' | 'logs' | 'firmware' | 'simulator';

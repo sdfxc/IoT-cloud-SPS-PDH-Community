@@ -8,90 +8,121 @@ interface RadialGaugeProps {
   unit: string;
   label: string;
   labelKhmer?: string;
-  color: string;
+  color?: string;
   size?: number;
   icon?: React.ReactNode;
   statusText?: string;
   statusColor?: string;
-  gaugeType?: 'semicircle' | 'arc';
+  className?: string;
 }
 
 export const RadialGauge: React.FC<RadialGaugeProps> = ({
   id,
   value,
-  min,
-  max,
+  min = 0,
+  max = 100,
   unit,
   label,
   labelKhmer,
-  color,
-  size = 180,
+  color = '#ff6b6b',
+  size = 260,
   icon,
   statusText,
   statusColor = '#10b981',
-  gaugeType = 'arc'
+  className = '',
 }) => {
-  const isSemicircle = gaugeType === 'semicircle';
-  const strokeWidth = 14;
-  const radius = (size - strokeWidth * 2) / 2;
-  const center = size / 2;
+  // Upright horseshoe/dome arch mathematically calculated:
+  // Starts at bottom-left (-180° / left), sweeps over the top (90° / apex), to bottom-right (0° / right).
+  // Total span is 180 degrees.
+  const strokeWidth = 18;
+  const width = size;
+  const height = size * 0.62; // Proportionate height for a semicircle arch with room for ticks & values
   
-  // Semicircle (180 deg) or standard arc (240 deg)
-  const startAngle = isSemicircle ? 180 : 135;
-  const totalAngle = isSemicircle ? 180 : 270;
-  
-  const clampedValue = Math.min(Math.max(value, min), max);
+  const radius = (width - strokeWidth * 2) / 2;
+  const centerX = width / 2;
+  const centerY = height - 26; // baseline near bottom
+
+  const clampedValue = Math.min(Math.max(Number(value) || 0, min), max);
   const percentage = (clampedValue - min) / (max - min || 1);
-  const currentAngle = startAngle + percentage * totalAngle;
 
-  const polarToCartesian = (centerX: number, centerY: number, r: number, angleInDegrees: number) => {
-    const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180.0;
-    return {
-      x: centerX + r * Math.cos(angleInRadians),
-      y: centerY + r * Math.sin(angleInRadians),
-    };
+  // Calculate coordinates on the upper semicircle
+  // angle = 180 (left) down to 0 (right)
+  const getCoords = (pct: number) => {
+    const angleDeg = 180 - pct * 180;
+    const angleRad = (angleDeg * Math.PI) / 180;
+    const x = centerX + radius * Math.cos(angleRad);
+    const y = centerY - radius * Math.sin(angleRad);
+    return { x, y };
   };
 
-  const describeArc = (x: number, y: number, r: number, startA: number, endA: number) => {
-    const start = polarToCartesian(x, y, r, endA);
-    const end = polarToCartesian(x, y, r, startA);
-    const largeArcFlag = endA - startA <= 180 ? '0' : '1';
-    return ['M', start.x, start.y, 'A', r, r, 0, largeArcFlag, 0, end.x, end.y].join(' ');
-  };
+  const startPt = getCoords(0);
+  const endPt = getCoords(1);
+  const currPt = getCoords(percentage);
 
-  const backgroundArc = describeArc(center, center, radius, startAngle, startAngle + totalAngle);
-  const valueArc = describeArc(center, center, radius, startAngle, currentAngle);
+  // Background track path: Full semicircle from left over top to right
+  const bgPath = `M ${startPt.x} ${startPt.y} A ${radius} ${radius} 0 0 1 ${endPt.x} ${endPt.y}`;
 
-  // Gradient ID safe string
-  const gradId = `gauge-grad-${color.replace(/[^a-zA-Z0-9]/g, '')}-${label.replace(/[^a-zA-Z0-9]/g, '')}`;
+  // Active value path
+  const valuePath = percentage > 0.005
+    ? `M ${startPt.x} ${startPt.y} A ${radius} ${radius} 0 0 1 ${currPt.x} ${currPt.y}`
+    : '';
+
+  const gradId = `gauge-grad-${(color || '').replace(/[^a-zA-Z0-9]/g, '')}-${label.replace(/[^a-zA-Z0-9]/g, '')}`;
 
   return (
-    <div id={id} className="flex flex-col items-center justify-center p-2 relative w-full">
-      <div className="relative" style={{ width: size, height: isSemicircle ? size * 0.75 : size }}>
-        <svg width={size} height={isSemicircle ? size * 0.75 : size} className="overflow-visible">
+    <div id={id} className={`flex flex-col justify-between w-full h-full select-none ${className}`}>
+      {/* Top Header matching Blynk Console (Image 2) */}
+      <div className="flex items-start justify-between mb-1">
+        <div>
+          <h4 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-1.5">
+            {icon && <span className="text-slate-400">{icon}</span>}
+            <span>{label}</span>
+          </h4>
+          {labelKhmer && (
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{labelKhmer}</p>
+          )}
+        </div>
+
+        {statusText && (
+          <span
+            className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 shadow-xs"
+            style={{ color: statusColor }}
+          >
+            {statusText}
+          </span>
+        )}
+      </div>
+
+      {/* Main Arch Graphic & Center Value */}
+      <div className="relative flex items-center justify-center my-auto py-2">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="w-full max-w-[280px] h-auto overflow-visible"
+        >
           <defs>
             <linearGradient id={gradId} x1="0%" y1="100%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor={color} stopOpacity="0.7" />
+              <stop offset="0%" stopColor={color} stopOpacity="0.85" />
               <stop offset="100%" stopColor={color} stopOpacity="1" />
             </linearGradient>
             <filter id={`glow-${gradId}`} x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor={color} floodOpacity="0.4" />
+              <feDropShadow dx="0" dy="1" stdDeviation="3" floodColor={color} floodOpacity="0.3" />
             </filter>
           </defs>
 
-          {/* Background Track */}
+          {/* Background Arc Track (Image 2 style soft gray) */}
           <path
-            d={backgroundArc}
+            d={bgPath}
             fill="none"
-            stroke="#1e293b"
+            stroke="currentColor"
+            className="text-slate-200 dark:text-slate-800"
             strokeWidth={strokeWidth}
             strokeLinecap="round"
           />
 
-          {/* Value Active Arc */}
-          {percentage > 0.001 && (
+          {/* Active Value Arc Track */}
+          {valuePath && (
             <path
-              d={valueArc}
+              d={valuePath}
               fill="none"
               stroke={`url(#${gradId})`}
               strokeWidth={strokeWidth}
@@ -101,52 +132,44 @@ export const RadialGauge: React.FC<RadialGaugeProps> = ({
             />
           )}
 
-          {/* Min and Max tick marks */}
+          {/* Min value label below left arch tip (Image 2) */}
           <text
-            x={center - radius * (isSemicircle ? 0.9 : 0.7)}
-            y={isSemicircle ? center + 5 : center + radius * 0.85}
-            fill="#64748b"
-            fontSize="10"
-            fontWeight="600"
+            x={startPt.x}
+            y={centerY + 20}
+            fill="currentColor"
+            className="text-slate-700 dark:text-slate-300 font-mono text-sm sm:text-base font-semibold"
             textAnchor="middle"
           >
             {min}
           </text>
+
+          {/* Max value label below right arch tip (Image 2) */}
           <text
-            x={center + radius * (isSemicircle ? 0.9 : 0.7)}
-            y={isSemicircle ? center + 5 : center + radius * 0.85}
-            fill="#64748b"
-            fontSize="10"
-            fontWeight="600"
+            x={endPt.x}
+            y={centerY + 20}
+            fill="currentColor"
+            className="text-slate-700 dark:text-slate-300 font-mono text-sm sm:text-base font-semibold"
             textAnchor="middle"
           >
             {max}
           </text>
         </svg>
 
-        {/* Center Value Content */}
-        <div className={`absolute inset-0 flex flex-col items-center justify-center ${isSemicircle ? 'pt-4' : 'pt-2'}`}>
-          {icon && <div className="mb-0.5 text-slate-400">{icon}</div>}
+        {/* Big Center Value + Unit (Image 2) */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pt-5 pointer-events-none">
           <div className="flex items-baseline gap-0.5">
-            <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white font-mono">
-              {typeof value === 'number' ? (Number.isInteger(value) ? value : value.toFixed(1)) : value}
+            <span className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-800 dark:text-white font-mono">
+              {typeof value === 'number'
+                ? Number.isInteger(value)
+                  ? value
+                  : value.toFixed(1)
+                : value}
             </span>
-            <span className="text-xs sm:text-sm font-semibold text-slate-400 ml-0.5 font-mono">{unit}</span>
+            <span className="text-sm sm:text-base font-bold text-slate-500 dark:text-slate-400 font-mono ml-0.5">
+              {unit}
+            </span>
           </div>
-          {statusText && (
-            <span
-              className="mt-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-slate-700 bg-slate-800/80"
-              style={{ color: statusColor }}
-            >
-              {statusText}
-            </span>
-          )}
         </div>
-      </div>
-
-      <div className="text-center mt-1">
-        <h4 className="text-xs font-bold text-slate-200 tracking-wide">{label}</h4>
-        {labelKhmer && <p className="text-[11px] text-slate-400 mt-0.5">{labelKhmer}</p>}
       </div>
     </div>
   );

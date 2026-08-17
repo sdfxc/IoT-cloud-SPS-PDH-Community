@@ -15,7 +15,9 @@ import {
   Volume2,
   VolumeX,
   Languages,
-  Layers
+  Layers,
+  Sun,
+  Moon
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -27,6 +29,8 @@ interface TopNavProps {
   onToggleSimulation: () => void;
   lang: 'km' | 'en';
   onToggleLang: () => void;
+  theme: 'light' | 'dark';
+  onToggleTheme: () => void;
   soundEnabled: boolean;
   onToggleSound: () => void;
   onOpenQr: () => void;
@@ -42,6 +46,8 @@ export const TopNav: React.FC<TopNavProps> = ({
   onToggleSimulation,
   lang,
   onToggleLang,
+  theme,
+  onToggleTheme,
   soundEnabled,
   onToggleSound,
   onOpenQr,
@@ -66,13 +72,13 @@ export const TopNav: React.FC<TopNavProps> = ({
     : 'No Device';
 
   return (
-    <header id="top-navigation-bar" className="bg-slate-900/95 border-b border-slate-800 sticky top-0 z-30 backdrop-blur-md">
+    <header id="top-navigation-bar" className="bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 backdrop-blur-md transition-colors duration-200">
       <div className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
         {/* Left: Device Selector & Online Status */}
         <div className="flex items-center gap-3">
           {/* Device dropdown */}
-          <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-800 rounded-lg px-2.5 py-1.5 shadow-sm">
-            <Cpu className="w-4 h-4 text-emerald-400" />
+          <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-950/80 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-1.5 shadow-sm">
+            <Cpu className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             <select
               id="device-selector-dropdown"
               value={activeDevice?.id || ''}
@@ -81,30 +87,30 @@ export const TopNav: React.FC<TopNavProps> = ({
                 if (found) onSelectDevice(found);
               }}
               aria-label={lang === 'km' ? 'ជ្រើសរើសឧបករណ៍' : 'Select IoT Device'}
-              className="bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer pr-2"
+              className="bg-transparent text-xs font-bold text-slate-900 dark:text-white focus:outline-none cursor-pointer pr-2"
             >
               {devices.map(d => (
-                <option key={d.id} value={d.id} className="bg-slate-900 text-white">
+                <option key={d.id} value={d.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                   {lang === 'km' ? d.nameKhmer || d.name : d.name}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Active status & Ping */}
-          <div className="flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 px-2.5 py-1 rounded-full text-xs font-medium">
+          {/* Active status */}
+          <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400 px-3 py-1 rounded-full text-xs font-semibold">
             <span className="flex h-2 w-2 relative">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
-            <span className="font-bold">{lang === 'km' ? 'ដំណើរការ (Online)' : 'Active (Online)'}</span>
-            <span className="text-[10px] text-emerald-300/70 border-l border-emerald-500/30 pl-1.5 font-mono">24ms</span>
+            <span>{lang === 'km' ? 'Online' : 'Active'}</span>
+            <span className="text-[10px] text-emerald-600 dark:text-emerald-300/70 border-l border-emerald-300 dark:border-emerald-500/30 pl-1.5 font-mono">24ms</span>
           </div>
 
           {/* Wi-Fi RSSI Signal */}
           {activeDevice && (
-            <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-400 bg-slate-800/60 px-2.5 py-1 rounded-md border border-slate-700/60 font-mono">
-              <Wifi className="w-3.5 h-3.5 text-cyan-400" />
+            <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700/60 font-mono">
+              <Wifi className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
               <span>{activeDevice.rssi} dBm</span>
             </div>
           )}
@@ -112,17 +118,17 @@ export const TopNav: React.FC<TopNavProps> = ({
 
         {/* Center: Auth Token Box with Copy */}
         {activeDevice && (
-          <div className="hidden lg:flex items-center gap-1.5 bg-slate-950/90 border border-slate-800 rounded-lg px-3 py-1 text-xs">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              {lang === 'km' ? 'Auth Token:' : 'Auth Token:'}
+          <div className="hidden lg:flex items-center gap-1.5 bg-slate-100 dark:bg-slate-950/90 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1 text-xs">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Token:
             </span>
-            <code className="font-mono text-emerald-400 text-xs select-all px-1.5 py-0.5 bg-slate-900 rounded border border-slate-800">
+            <code className="font-mono text-emerald-700 dark:text-emerald-400 text-xs select-all px-1.5 py-0.5 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-800">
               {maskedToken}
             </code>
             <button
               id="toggle-show-token-btn"
               onClick={() => setShowTokenSecret(!showTokenSecret)}
-              className="p-1 text-slate-400 hover:text-slate-200 transition"
+              className="p-1 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition"
               title={showTokenSecret ? 'Hide Token' : 'Show Token'}
             >
               {showTokenSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -130,16 +136,16 @@ export const TopNav: React.FC<TopNavProps> = ({
             <button
               id="copy-auth-token-btn"
               onClick={copyAuthToken}
-              className="flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded transition font-medium text-xs"
+              className="flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 rounded-md transition font-semibold text-xs"
               title="Copy Blynk Auth Token for ESP32"
             >
-              {copiedToken ? <Check className="w-3 h-3 text-emerald-300" /> : <Copy className="w-3 h-3" />}
+              {copiedToken ? <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-300" /> : <Copy className="w-3 h-3" />}
               <span>{copiedToken ? (lang === 'km' ? 'បានចម្លង!' : 'Copied!') : (lang === 'km' ? 'ចម្លង' : 'Copy')}</span>
             </button>
             <button
               id="open-qr-token-btn"
               onClick={onOpenQr}
-              className="p-1 text-slate-400 hover:text-cyan-400 transition ml-0.5"
+              className="p-1 text-slate-500 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 transition ml-0.5"
               title="QR Code for Mobile Provisioning"
             >
               <QrCode className="w-3.5 h-3.5" />
@@ -147,22 +153,42 @@ export const TopNav: React.FC<TopNavProps> = ({
           </div>
         )}
 
-        {/* Right Action Tools: Simulator Toggle, Sound, Language, API Docs */}
+        {/* Right Action Tools: Theme Switcher, Simulator Toggle, Sound, Language, API Docs */}
         <div className="flex items-center gap-2">
+          {/* Light / Dark Mode Switcher */}
+          <button
+            id="theme-toggle-btn"
+            onClick={onToggleTheme}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition border bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/90 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-700 shadow-sm cursor-pointer"
+            title={theme === 'dark' ? 'ប្តូរទៅជា Light Mode' : 'Switch to Dark Mode'}
+          >
+            {theme === 'dark' ? (
+              <>
+                <Sun className="w-4 h-4 text-amber-400" />
+                <span className="hidden sm:inline">Light Mode</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-4 h-4 text-indigo-600" />
+                <span className="hidden sm:inline">Dark Mode</span>
+              </>
+            )}
+          </button>
+
           {/* Virtual ESP32 Simulator status */}
           <button
             id="simulation-toggle-btn"
             onClick={onToggleSimulation}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition ${
               isSimulating
-                ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25'
-                : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-slate-200'
+                ? 'bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25'
+                : 'bg-slate-100 dark:bg-slate-800/80 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400'
             }`}
             title={isSimulating ? 'Pause ESP32 Simulator' : 'Start ESP32 Simulator'}
           >
-            {isSimulating ? <Pause className="w-3.5 h-3.5 text-amber-400" /> : <Play className="w-3.5 h-3.5 text-slate-400" />}
+            {isSimulating ? <Pause className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" /> : <Play className="w-3.5 h-3.5 text-slate-500" />}
             <span className="hidden sm:inline">
-              {isSimulating ? (lang === 'km' ? 'ESP32 Sim: កំពុងរត់' : 'Sim: Active') : (lang === 'km' ? 'ESP32 Sim: ផ្អាក' : 'Sim: Paused')}
+              {isSimulating ? (lang === 'km' ? 'ESP32 Sim' : 'Sim: Active') : (lang === 'km' ? 'ESP32 Sim: ផ្អាក' : 'Sim: Paused')}
             </span>
           </button>
 
@@ -170,7 +196,7 @@ export const TopNav: React.FC<TopNavProps> = ({
           <button
             id="open-virtual-bench-btn"
             onClick={onOpenSimulator}
-            className="flex items-center gap-1 px-2 py-1 bg-slate-800/80 hover:bg-slate-800 text-cyan-400 border border-slate-700 rounded-lg text-xs font-semibold transition"
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-800 text-cyan-700 dark:text-cyan-400 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold transition"
             title="Interactive ESP32 Virtual Test Bench"
           >
             <Radio className="w-3.5 h-3.5" />
@@ -181,53 +207,34 @@ export const TopNav: React.FC<TopNavProps> = ({
           <button
             id="open-api-docs-btn"
             onClick={onOpenApiDocs}
-            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg border border-transparent hover:border-slate-700 transition"
+            className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-300 dark:hover:border-slate-700 transition"
             title={lang === 'km' ? 'កម្រងឯកសារ API' : 'REST & Blynk API Docs'}
           >
-            <BookOpen className="w-4 h-4 text-emerald-400" />
+            <BookOpen className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           </button>
 
           {/* Sound toggle */}
           <button
             id="toggle-sound-btn"
             onClick={onToggleSound}
-            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg border border-transparent hover:border-slate-700 transition"
+            className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-300 dark:hover:border-slate-700 transition"
             title={soundEnabled ? 'Relay Click Sound ON' : 'Sound Muted'}
           >
-            {soundEnabled ? <Volume2 className="w-4 h-4 text-slate-300" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
+            {soundEnabled ? <Volume2 className="w-4 h-4 text-slate-700 dark:text-slate-300" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
           </button>
 
           {/* Language Toggle (Khmer / English) */}
           <button
             id="language-toggle-btn"
             onClick={onToggleLang}
-            className="flex items-center gap-1 px-2 py-1 bg-slate-800/80 hover:bg-slate-800 text-slate-300 border border-slate-700 rounded-lg text-xs font-bold transition"
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold transition"
             title="Switch Language (ភាសាខ្មែរ / English)"
           >
-            <Languages className="w-3.5 h-3.5 text-emerald-400" />
+            <Languages className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             <span>{lang === 'km' ? '🇰🇭 ខ្មែរ' : '🇬🇧 EN'}</span>
           </button>
         </div>
       </div>
-
-      {/* Sub-bar showing Template & Organization metadata on mobile/tablet */}
-      {activeDevice && (
-        <div className="px-4 py-1 bg-slate-950/60 border-t border-slate-800/50 flex items-center justify-between text-[11px] text-slate-400">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1">
-              <Layers className="w-3 h-3 text-slate-500" />
-              <span className="text-slate-400">{activeDevice.orgId}</span>
-            </span>
-            <span className="text-slate-600">|</span>
-            <span>Template: <strong className="text-slate-300 font-mono">{activeDevice.templateId}</strong></span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span>Hardware: <strong className="text-slate-300">{activeDevice.hardware}</strong></span>
-            <span className="text-slate-600">|</span>
-            <span>IP: <strong className="text-emerald-400 font-mono">{activeDevice.ipAddress}</strong></span>
-          </div>
-        </div>
-      )}
     </header>
   );
 };

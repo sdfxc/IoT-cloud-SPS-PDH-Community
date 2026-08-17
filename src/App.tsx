@@ -13,6 +13,7 @@ import { iotService } from './services/iotService';
 import { Sidebar } from './components/Sidebar';
 import { TopNav } from './components/TopNav';
 import { DashboardView } from './components/DashboardView';
+import { DashboardBuilderView } from './components/DashboardBuilderView';
 import { DevicesView } from './components/DevicesView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { AutomationsView } from './components/AutomationsView';
@@ -34,6 +35,28 @@ export default function App() {
   const [lang, setLang] = useState<'km' | 'en'>('km');
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isSimulating, setIsSimulating] = useState(true);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('blynk_theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+    return 'dark';
+  });
+
+  // Sync theme with document class
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+      root.classList.remove('light');
+    } else {
+      root.classList.remove('dark');
+      root.classList.add('light');
+    }
+    localStorage.setItem('blynk_theme', theme);
+  }, [theme]);
+
+  const handleToggleTheme = () => {
+    setTheme(t => (t === 'dark' ? 'light' : 'dark'));
+  };
 
   // Modals state
   const [isSimulatorModalOpen, setIsSimulatorModalOpen] = useState(false);
@@ -82,7 +105,20 @@ export default function App() {
         setDevices(prev =>
           prev.map(d => {
             if (d.id === deviceId) {
-              return { ...d, lastSeen: 'Just now', pins: { ...d.pins, ...pins } };
+              const mergedPins = { ...d.pins };
+              if (pins) {
+                Object.keys(pins).forEach(pk => {
+                  const pKey = pk as VirtualPinId;
+                  if (mergedPins[pKey]) {
+                    // If it's a relay or switch, preserve current state unless pins explicitly has a valid value
+                    const isActuator = mergedPins[pKey].type === 'relay' || mergedPins[pKey].type === 'status_led';
+                    if (!isActuator || pins[pKey].value !== undefined) {
+                      mergedPins[pKey] = { ...mergedPins[pKey], ...pins[pKey] };
+                    }
+                  }
+                });
+              }
+              return { ...d, lastSeen: 'Just now', pins: mergedPins };
             }
             return d;
           })
@@ -90,7 +126,19 @@ export default function App() {
 
         setActiveDevice(prev => {
           if (prev && prev.id === deviceId) {
-            return { ...prev, lastSeen: 'Just now', pins: { ...prev.pins, ...pins } };
+            const mergedPins = { ...prev.pins };
+            if (pins) {
+              Object.keys(pins).forEach(pk => {
+                const pKey = pk as VirtualPinId;
+                if (mergedPins[pKey]) {
+                  const isActuator = mergedPins[pKey].type === 'relay' || mergedPins[pKey].type === 'status_led';
+                  if (!isActuator || pins[pKey].value !== undefined) {
+                    mergedPins[pKey] = { ...mergedPins[pKey], ...pins[pKey] };
+                  }
+                }
+              });
+            }
+            return { ...prev, lastSeen: 'Just now', pins: mergedPins };
           }
           return prev;
         });
@@ -208,7 +256,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row antialiased selection:bg-emerald-500 selection:text-slate-950">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col md:flex-row antialiased selection:bg-emerald-500 selection:text-slate-950 transition-colors duration-200">
       {/* Left Sidebar */}
       <Sidebar
         currentTab={currentTab}
@@ -222,6 +270,8 @@ export default function App() {
         lang={lang}
         activeDeviceCount={devices.length}
         automationsCount={automations.filter(r => r.enabled).length}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
       />
 
       {/* Main Content Area */}
@@ -235,6 +285,8 @@ export default function App() {
           onToggleSimulation={handleToggleSimulation}
           lang={lang}
           onToggleLang={() => setLang(l => (l === 'km' ? 'en' : 'km'))}
+          theme={theme}
+          onToggleTheme={handleToggleTheme}
           soundEnabled={soundEnabled}
           onToggleSound={handleToggleSound}
           onOpenQr={() => setQrModalDevice(activeDevice)}
@@ -250,6 +302,14 @@ export default function App() {
               telemetryData={telemetryHistory}
               timeFilter={timeFilter}
               onTimeFilterChange={setTimeFilter}
+              onUpdatePin={handleUpdatePin}
+              lang={lang}
+            />
+          )}
+
+          {currentTab === 'widget_builder' && (
+            <DashboardBuilderView
+              device={activeDevice}
               onUpdatePin={handleUpdatePin}
               lang={lang}
             />

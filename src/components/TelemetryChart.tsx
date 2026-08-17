@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { TelemetryPoint, TimeFilter } from '../types';
-import { Activity, Download, RefreshCw, ZoomIn } from 'lucide-react';
+import { Activity, Download } from 'lucide-react';
 
 interface TelemetryChartProps {
   data: TelemetryPoint[];
@@ -145,44 +145,43 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
     { key: '6h', label: '6h', labelKhmer: '៦ ម៉ោង' },
     { key: '1d', label: '1d', labelKhmer: '១ ថ្ងៃ' },
     { key: '1w', label: '1w', labelKhmer: '១ សប្តាហ៍' },
-    { key: '1mo', label: '1mo', labelKhmer: '១ ខែ' },
   ];
 
   const hoveredPoint = hoverIndex !== null && points[hoverIndex] ? points[hoverIndex] : (points.length > 0 ? points[points.length - 1] : null);
 
   return (
-    <div id="telemetry-chart-container" className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-xl backdrop-blur-sm">
+    <div id="telemetry-chart-container" className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm dark:shadow-xl transition-colors duration-200">
       {/* Top Header & Time Filter Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800/80">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-            <Activity className="w-4 h-4 animate-pulse" />
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-300 dark:border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+            <Activity className="w-5 h-5 animate-pulse" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
               {lang === 'km' ? 'ក្រាបទិន្នន័យ Sensor Real-Time' : 'Real-Time Sensor Telemetry'}
               <span className="flex h-2 w-2 relative">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
             </h3>
-            <p className="text-xs text-slate-400">
-              {lang === 'km' ? 'ធ្វើបច្ចុប្បន្នភាពរៀងរាល់ ២វិនាទីម្តង' : 'Syncing live telemetry every 2000ms'}
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+              {lang === 'km' ? 'ធ្វើបច្ចុប្បន្នភាពផ្ទាល់រៀងរាល់ ២វិនាទីម្តង' : 'Syncing live telemetry every 2000ms'}
             </p>
           </div>
         </div>
 
-        {/* Time Filter Bar (Live, 1h, 6h, 1d, 1w, 1mo) */}
-        <div className="flex items-center gap-1.5 bg-slate-950/80 p-1 rounded-lg border border-slate-800">
+        {/* Time Filter Bar (Live, 1h, 6h, 1d, 1w) */}
+        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950/80 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
           {timeFilterOptions.map(tf => (
             <button
               key={tf.key}
               id={`filter-btn-${tf.key}`}
               onClick={() => onFilterChange(tf.key)}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
+              className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
                 currentFilter === tf.key
-                  ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  ? 'bg-emerald-500 text-slate-950 font-black shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800/60'
               }`}
             >
               {lang === 'km' ? tf.labelKhmer : tf.label}
@@ -193,9 +192,9 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
             id="export-csv-btn"
             onClick={exportCsv}
             title={lang === 'km' ? 'ទាញយក CSV' : 'Export CSV'}
-            className="p-1 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded ml-1 transition"
+            className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg ml-1 transition"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -209,10 +208,10 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
               key={s.key}
               id={`toggle-sensor-${s.key}`}
               onClick={() => toggleSensor(s.key)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all ${
                 isActive
-                  ? 'bg-slate-800/90 text-white border-slate-700 shadow-sm'
-                  : 'bg-slate-900/40 text-slate-500 border-slate-800 opacity-60'
+                  ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700 shadow-sm'
+                  : 'bg-slate-50 dark:bg-slate-900/40 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-800 opacity-60'
               }`}
             >
               <span
@@ -221,7 +220,7 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
               />
               <span>{lang === 'km' ? s.labelKhmer : s.label}</span>
               {hoveredPoint && isActive && (
-                <span className="ml-1 font-mono text-slate-300 font-bold">
+                <span className="ml-1 font-mono text-slate-900 dark:text-slate-200 font-extrabold">
                   {hoveredPoint[s.key]}
                   {s.unit}
                 </span>
@@ -251,7 +250,7 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
           <defs>
             {SENSORS.map(s => (
               <linearGradient key={`grad-${s.key}`} id={`area-grad-${s.key}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={s.color} stopOpacity="0.25" />
+                <stop offset="0%" stopColor={s.color} stopOpacity="0.2" />
                 <stop offset="100%" stopColor={s.color} stopOpacity="0.0" />
               </linearGradient>
             ))}
@@ -267,17 +266,17 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
                   y1={y}
                   x2={padding.left + usableWidth}
                   y2={y}
-                  stroke="#1e293b"
+                  stroke="currentColor"
+                  className="text-slate-200 dark:text-slate-800"
                   strokeDasharray="4 4"
                   strokeWidth="1"
                 />
                 <text
                   x={padding.left - 6}
                   y={y + 3}
-                  fill="#475569"
-                  fontSize="9"
+                  fill="currentColor"
+                  className="text-slate-400 dark:text-slate-600 font-mono text-[9px]"
                   textAnchor="end"
-                  fontFamily="monospace"
                 >
                   {Math.round((1 - norm) * 100)}%
                 </text>
@@ -296,17 +295,17 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
                   y1={padding.top}
                   x2={x}
                   y2={padding.top + usableHeight}
-                  stroke="#1e293b"
+                  stroke="currentColor"
+                  className="text-slate-200 dark:text-slate-800"
                   strokeDasharray="2 2"
                   strokeWidth="1"
                 />
                 <text
                   x={x}
                   y={padding.top + usableHeight + 16}
-                  fill="#64748b"
-                  fontSize="9"
+                  fill="currentColor"
+                  className="text-slate-500 dark:text-slate-400 font-mono text-[9px]"
                   textAnchor="middle"
-                  fontFamily="monospace"
                 >
                   {points[idx].timeStr}
                 </text>
@@ -353,7 +352,8 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
                 y1={padding.top}
                 x2={padding.left + (hoverIndex / (points.length - 1)) * usableWidth}
                 y2={padding.top + usableHeight}
-                stroke="#94a3b8"
+                stroke="currentColor"
+                className="text-slate-400 dark:text-slate-500"
                 strokeWidth="1"
                 strokeDasharray="3 3"
               />
@@ -373,7 +373,8 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
                     cy={cy}
                     r="5"
                     fill={s.color}
-                    stroke="#0f172a"
+                    stroke="currentColor"
+                    className="text-white dark:text-slate-900"
                     strokeWidth="2"
                   />
                 );
@@ -385,22 +386,22 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
         {/* Floating Tooltip Box */}
         {hoverIndex !== null && points[hoverIndex] && (
           <div
-            className="absolute top-2 right-4 bg-slate-950/95 border border-slate-700/80 rounded-lg p-2.5 shadow-2xl pointer-events-none text-xs backdrop-blur-md"
+            className="absolute top-2 right-4 bg-white/95 dark:bg-slate-950/95 border border-slate-200 dark:border-slate-700/80 rounded-xl p-3 shadow-2xl pointer-events-none text-xs backdrop-blur-md"
             style={{ minWidth: '160px' }}
           >
-            <div className="text-[11px] font-mono text-slate-400 mb-1 pb-1 border-b border-slate-800 flex justify-between">
+            <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mb-1 pb-1 border-b border-slate-200 dark:border-slate-800 flex justify-between">
               <span>Time:</span>
-              <span className="text-white font-bold">{points[hoverIndex].timeStr}</span>
+              <span className="text-slate-900 dark:text-white font-bold">{points[hoverIndex].timeStr}</span>
             </div>
             {SENSORS.map(s => {
               if (!activeSensors[s.key]) return null;
               return (
                 <div key={`tip-${s.key}`} className="flex items-center justify-between py-0.5">
-                  <span className="flex items-center gap-1.5 text-slate-300">
+                  <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
                     <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
                     {s.label}:
                   </span>
-                  <span className="font-mono font-bold text-white">
+                  <span className="font-mono font-bold text-slate-900 dark:text-white">
                     {points[hoverIndex][s.key]} {s.unit}
                   </span>
                 </div>
@@ -411,23 +412,23 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
       </div>
 
       {/* Bottom Summary Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 mt-2 border-t border-slate-800/80 text-xs">
-        <div className="bg-slate-950/50 p-2 rounded-lg border border-slate-800/60">
-          <span className="text-slate-400 block text-[11px]">Avg Temperature</span>
-          <span className="text-sm font-bold text-orange-400 font-mono">{stats.tempAvg}°C</span>
-          <span className="text-[10px] text-slate-500 ml-1.5 font-mono">({stats.tempMin} - {stats.tempMax}°C)</span>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 mt-3 border-t border-slate-200 dark:border-slate-800/80 text-xs">
+        <div className="bg-slate-50 dark:bg-slate-950/50 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800/60">
+          <span className="text-slate-500 dark:text-slate-400 block text-[11px] font-semibold">Avg Temp</span>
+          <span className="text-sm sm:text-base font-bold text-orange-600 dark:text-orange-400 font-mono">{stats.tempAvg}°C</span>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-1 font-mono">({stats.tempMin}-{stats.tempMax}°C)</span>
         </div>
-        <div className="bg-slate-950/50 p-2 rounded-lg border border-slate-800/60">
-          <span className="text-slate-400 block text-[11px]">Avg Humidity</span>
-          <span className="text-sm font-bold text-cyan-400 font-mono">{stats.humAvg}%</span>
+        <div className="bg-slate-50 dark:bg-slate-950/50 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800/60">
+          <span className="text-slate-500 dark:text-slate-400 block text-[11px] font-semibold">Avg Humidity</span>
+          <span className="text-sm sm:text-base font-bold text-cyan-600 dark:text-cyan-400 font-mono">{stats.humAvg}%</span>
         </div>
-        <div className="bg-slate-950/50 p-2 rounded-lg border border-slate-800/60">
-          <span className="text-slate-400 block text-[11px]">Avg Air Quality</span>
-          <span className="text-sm font-bold text-purple-400 font-mono">{stats.gasAvg} ppm</span>
+        <div className="bg-slate-50 dark:bg-slate-950/50 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800/60">
+          <span className="text-slate-500 dark:text-slate-400 block text-[11px] font-semibold">Avg Air Quality</span>
+          <span className="text-sm sm:text-base font-bold text-purple-600 dark:text-purple-400 font-mono">{stats.gasAvg} ppm</span>
         </div>
-        <div className="bg-slate-950/50 p-2 rounded-lg border border-slate-800/60">
-          <span className="text-slate-400 block text-[11px]">Total Stream Points</span>
-          <span className="text-sm font-bold text-emerald-400 font-mono">{points.length} samples</span>
+        <div className="bg-slate-50 dark:bg-slate-950/50 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800/60">
+          <span className="text-slate-500 dark:text-slate-400 block text-[11px] font-semibold">Live Samples</span>
+          <span className="text-sm sm:text-base font-bold text-emerald-600 dark:text-emerald-400 font-mono">{points.length} pts</span>
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { IoTDevice } from '../types';
 import {
   Code2,
@@ -15,7 +15,30 @@ import {
   Settings,
   HelpCircle,
   Play,
-  Layers
+  Layers,
+  Sliders,
+  KeyRound,
+  FileCode,
+  Radio,
+  Send,
+  MessageSquare,
+  Bot,
+  BellRing,
+  ExternalLink,
+  ShieldAlert,
+  Save,
+  RotateCcw,
+  Power,
+  Flame,
+  Lightbulb,
+  Zap,
+  Globe,
+  Smartphone,
+  Laptop,
+  Usb,
+  AlertTriangle,
+  RefreshCw,
+  Edit3
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -25,508 +48,612 @@ interface FirmwareViewProps {
 }
 
 export const FirmwareView: React.FC<FirmwareViewProps> = ({ device, lang }) => {
-  const [boardType, setBoardType] = useState<'esp32_standard' | 'esp32_cam'>('esp32_standard');
-  const [wifiSsid, setWifiSsid] = useState('My_Home_WiFi_2.4G');
-  const [wifiPass, setWifiPass] = useState('password1234');
+  const [boardType, setBoardType] = useState<
+    'esp32_cam' | 'esp32_blynk_lib' | 'esp32_standard' | 'esp8266_nodemcu' | 'esp32_c3' | 'arduino_uno_wifi'
+  >('esp32_cam');
+  
+  // Blynk Credentials
+  const [blynkTemplateId, setBlynkTemplateId] = useState(
+    device?.templateId || 'TMPL_SMART_LAMP_MQ135'
+  );
+  const [blynkTemplateName, setBlynkTemplateName] = useState(
+    device?.name || 'Smart_Lamp & MQ135'
+  );
+  const [blynkAuthToken, setBlynkAuthToken] = useState(
+    device?.authToken || 'YFr7r30K8HV8rRQ7x59hYojzeU0m9wYs'
+  );
+
+  // Telegram Credentials
+  const [telegramBotToken, setTelegramBotToken] = useState('8928313450:AAEvmTZMGGDXRJZ-W1ZuE2vc5AlVSQ5oDbY');
+  const [telegramChatId, setTelegramChatId] = useState('5780071626');
+  const [telegramTesting, setTelegramTesting] = useState(false);
+  const [telegramStatus, setTelegramStatus] = useState<string | null>(null);
+
+  const [wifiSsid, setWifiSsid] = useState('SMART-WIFI-B339');
+  const [wifiPass, setWifiPass] = useState('5E85D60F');
   const [serverUrl, setServerUrl] = useState(
     typeof window !== 'undefined' ? window.location.origin : 'https://your-app.run.app'
   );
   const [intervalMs, setIntervalMs] = useState(2000);
-  const [dhtPin, setDhtPin] = useState(4);
-  const [relay1Pin, setRelay1Pin] = useState(23);
-  const [relay2Pin, setRelay2Pin] = useState(22);
-  const [gasPin, setGasPin] = useState(34);
-  const [soilPin, setSoilPin] = useState(35);
-  const [fanPwmPin, setFanPwmPin] = useState(19);
+  const [lampPin, setLampPin] = useState(12);
+  const [mq135Pin, setMq135Pin] = useState(14);
+
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedDefines, setCopiedDefines] = useState(false);
   const [copiedCurl, setCopiedCurl] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState<'code' | 'guide' | 'wiring' | 'api'>('code');
+  const [activeSubTab, setActiveSubTab] = useState<'editor' | 'remote' | 'code' | 'telegram' | 'guide' | 'wiring' | 'api'>('editor');
 
-  const token = device?.authToken || 'blynk_esp32_khmer_gh_8923a1';
+  // --- LIVE IN-APP CODE EDITOR STATE ---
+  const [customCode, setCustomCode] = useState<string>('');
+  const [editorFontSize, setEditorFontSize] = useState<number>(13);
+  const [codeSavedNotification, setCodeSavedNotification] = useState(false);
+  const [editorTemplatePreset, setEditorTemplatePreset] = useState<'esp32_cam_urlencode' | 'esp32_devkit' | 'esp32_direct_webserver' | 'esp8266_nodemcu'>('esp32_cam_urlencode');
 
-  // Dynamic ESP32 Standard Arduino C++ Code
-  const standardCppCode = `/*
+  // --- REMOTE CHIP CONTROLLER STATE ---
+  const [remoteLampState, setRemoteLampState] = useState<number>(
+    device?.pins.V0 ? Number(device.pins.V0.value) : 0
+  );
+  const [remoteFlashState, setRemoteFlashState] = useState<number>(0);
+  const [remoteGasSimState, setRemoteGasSimState] = useState<number>(
+    device?.pins.V1 ? Number(device.pins.V1.value) : 0
+  );
+  const [chipTargetIp, setChipTargetIp] = useState<string>(device?.ipAddress || '192.168.1.100');
+  const [remoteDispatchMode, setRemoteDispatchMode] = useState<'blynk_cloud' | 'local_ip' | 'web_serial'>('blynk_cloud');
+  const [remoteStatusMessage, setRemoteStatusMessage] = useState<string | null>(null);
+  const [remoteDispatching, setRemoteDispatching] = useState<boolean>(false);
+
+  // Web Serial API state
+  const [serialPort, setSerialPort] = useState<any>(null);
+  const [serialConnected, setSerialConnected] = useState<boolean>(false);
+  const [serialLogs, setSerialLogs] = useState<string[]>([]);
+  const [serialInput, setSerialInput] = useState<string>('');
+  const serialReaderRef = useRef<any>(null);
+
+  // Sync state if device props update
+  useEffect(() => {
+    if (device?.pins.V0 !== undefined) {
+      setRemoteLampState(Number(device.pins.V0.value));
+    }
+    if (device?.pins.V1 !== undefined) {
+      setRemoteGasSimState(Number(device.pins.V1.value));
+    }
+  }, [device]);
+
+  // 1. ESP32-CAM AI-Thinker Code with UrlEncode & Telegram Alerts (User Exact Project Specification)
+  const esp32CamUrlEncodeCode = `/*
  * ==============================================================================
- * Project: ESP32 Full-Stack IoT Cloud Node (Blynk.Cloud Console Compatible)
- * Target Hardware: ESP32 (NodeMCU / ESP32-WROOM-32 / ESP32-S3)
- * Server URL: ${serverUrl}
- * Auth Token: ${token}
- * Telemetry Interval: ${intervalMs} ms (2 seconds real-time loop)
+ * Project: Smart_Lamp & MQ135 Air Sensor on ESP32-CAM + Telegram Alerts
+ * Hardware: ESP32-CAM (AI-Thinker)
+ * Organization: SPS-PEH
  * ==============================================================================
  */
 
+// 1. Blynk Cloud Template Credentials (Must be at the very top)
+#define BLYNK_TEMPLATE_ID    "${blynkTemplateId}"
+#define BLYNK_TEMPLATE_NAME  "${blynkTemplateName}"
+#define BLYNK_AUTH_TOKEN     "${blynkAuthToken}"
+
+#define BLYNK_PRINT Serial
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
-#include <DHT.h>
+#include <UrlEncode.h> // ប្រើ Library UrlEncode ដើម្បីស្រួលផ្ញើអក្សរខ្មែរ
+#include <BlynkSimpleEsp32.h>
 
-// ---------------------- 1. WIFI & CLOUD CREDENTIALS ----------------------
-const char* WIFI_SSID     = "${wifiSsid}";
-const char* WIFI_PASSWORD = "${wifiPass}";
-const char* BLYNK_AUTH    = "${token}";
-const char* SERVER_BASE   = "${serverUrl}";
+// ---------------------- 2. WIFI & TELEGRAM CREDENTIALS ------------------------
+char ssid[] = "${wifiSsid}";
+char pass[] = "${wifiPass}";
 
-// ---------------------- 2. HARDWARE PIN DEFINITIONS ----------------------
-#define DHTPIN        ${dhtPin}     // Digital PIN for DHT22 / DHT11 (V0 Temp, V1 Hum)
-#define DHTTYPE       DHT22  // Change to DHT11 if using blue sensor
-#define PIN_RELAY_1   ${relay1Pin}    // Digital Output for Water Pump / Relay 1 (V2)
-#define PIN_RELAY_2   ${relay2Pin}    // Digital Output for Grow Light / Relay 2 (V3)
-#define PIN_FAN_PWM   ${fanPwmPin}    // PWM Output for Fan Speed (V4)
-#define PIN_GAS_MQ    ${gasPin}    // Analog ADC Input for MQ-135 / MQ-2 (V5)
-#define PIN_SOIL_ADC  ${soilPin}    // Analog ADC Input for Soil Moisture (V7)
-#define PIN_STATUS_LED 2     // ESP32 Onboard Blue LED (V6 Alert)
+const char* TELEGRAM_BOT_TOKEN = "${telegramBotToken}";
+const char* TELEGRAM_CHAT_ID   = "${telegramChatId}";
 
-// PWM Channel configuration for ESP32
-#define PWM_CHANNEL   0
-#define PWM_FREQ      5000
-#define PWM_RES       8      // 8-bit resolution (0-255)
+// ---------------------- 3. HARDWARE GPIO PIN DEFINITIONS ----------------------
+#define SMART_LAMP_PIN       ${lampPin}   // GPIO ${lampPin} for Smart_Lamp Relay (V0)
+#define MQ135_PIN            ${mq135Pin}   // GPIO ${mq135Pin} (Digital Input / DO) for MQ-135 (V1)
+#define ONBOARD_FLASH_LED     4   // Built-in Flash LED on GPIO 4
 
-// ---------------------- 3. OBJECTS & TIMING VARIABLES -------------------
-DHT dht(DHTPIN, DHTTYPE);
-unsigned long lastTelemetryTime = 0;
-const unsigned long TELEMETRY_INTERVAL = ${intervalMs}; // ${intervalMs} ms interval
+BlynkTimer timer;
+bool lastAlarmSent = false;
+unsigned long lastTgMsgTime = 0;
 
-// ---------------------- 4. SETUP FUNCTION --------------------------------
+// ---------------------- 4. TELEGRAM SENDER FUNCTION --------------------------
+void sendTelegramAlert(String message) {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  WiFiClientSecure client;
+  client.setInsecure(); // Skip SSL certificate check for ESP32-CAM
+
+  HTTPClient https;
+  // ប្រើ urlEncode() លើសារអក្សរខ្មែរ ឬ Emoji ដោយស្វ័យប្រវត្តិ
+  String url = "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) + 
+               "/sendMessage?chat_id=" + String(TELEGRAM_CHAT_ID) + 
+               "&text=" + urlEncode(message) + "&parse_mode=HTML";
+
+  Serial.println("[Telegram] Sending alert...");
+  https.begin(client, url);
+  int httpCode = https.GET();
+  if (httpCode > 0) {
+    Serial.printf("[Telegram] Message sent! (HTTP %d)\\n", httpCode);
+  } else {
+    Serial.printf("[Telegram] Error: %s\\n", https.errorToString(httpCode).c_str());
+  }
+  https.end();
+}
+
+// ---------------------- 5. BLYNK VIRTUAL PIN LISTENERS -----------------------
+BLYNK_WRITE(V0) {
+  int lampState = param.asInt();
+  digitalWrite(SMART_LAMP_PIN, lampState == 1 ? HIGH : LOW);
+  Serial.print("[Blynk] Smart_Lamp (GPIO ${lampPin} / V0) -> ");
+  Serial.println(lampState == 1 ? "ON" : "OFF");
+
+  String statusMsg = lampState == 1 
+    ? "💡 <b>[ESP32-CAM Smart_Lamp]</b> កុងតាក់ត្រូវបានបើក (ON) ✅"
+    : "💡 <b>[ESP32-CAM Smart_Lamp]</b> កុងតាក់ត្រូវបានបិទ (OFF) ⭕";
+  sendTelegramAlert(statusMsg);
+}
+
+// ---------------------- 6. SENSOR TELEMETRY & ALARM SENDER -------------------
+void sendMQ135Telemetry() {
+  int gasDigital = digitalRead(MQ135_PIN);
+  
+  // 💡 ប្រសិនបើ MQ135 DO Module របស់អ្នកជា Active LOW (ភាគច្រើន)៖
+  bool isGasAlert = (gasDigital == LOW); // កែជា HIGH វិញ ប្រសិនបើ Module របស់អ្នកជា Active HIGH
+
+  Blynk.virtualWrite(V1, isGasAlert ? 1 : 0);
+  Blynk.virtualWrite(V8, WiFi.RSSI());
+
+  Serial.printf("[ESP32-CAM] MQ135 Digital (GPIO ${mq135Pin}): %s | WiFi RSSI: %d dBm\\n", 
+                isGasAlert ? "HAZARD DETECTED" : "NORMAL", WiFi.RSSI());
+
+  if (isGasAlert) {
+    if (!lastAlarmSent || (millis() - lastTgMsgTime > 60000)) { // Limit alert 1 mn
+      lastAlarmSent = true;
+      lastTgMsgTime = millis();
+      String alertMsg = "⚠️ <b>[ESP32-CAM MQ-135 អាសន្នផ្សែងពុល]</b>\\n"
+                        "🚨 ស្ថានភាព: <b>រកឃើញមានផ្សែងពុល!</b>\\n"
+                        "📍 ESP32-CAM Pin ${mq135Pin}\\n"
+                        "⚠️ សូមប្រុងប្រយ័ត្ន និងបើកកង្ហារបន្សុទ្ធខ្យល់!";
+      sendTelegramAlert(alertMsg);
+    }
+  } else {
+    if (lastAlarmSent) {
+      lastAlarmSent = false;
+      String safeMsg = "✅ <b>[ESP32-CAM MQ-135 សុវត្ថិភាពឡើងវិញ]</b>\\n"
+                       "🌿 កម្រិតខ្យល់: <b>មានសុវត្ថិភាព (Normal)</b>";
+      sendTelegramAlert(safeMsg);
+    }
+  }
+}
+
+// ---------------------- 7. SETUP ---------------------------------------------
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\\n[SYSTEM] Starting ESP32 Blynk.Cloud IoT Node...");
+  Serial.println("\\n[SPS-PEH] Booting ESP32-CAM Smart_Lamp & MQ135 Node...");
 
-  // Configure GPIO Pins
-  pinMode(PIN_RELAY_1, OUTPUT);
-  pinMode(PIN_RELAY_2, OUTPUT);
-  pinMode(PIN_STATUS_LED, OUTPUT);
-  digitalWrite(PIN_RELAY_1, LOW);
-  digitalWrite(PIN_RELAY_2, LOW);
-  digitalWrite(PIN_STATUS_LED, LOW);
+  pinMode(SMART_LAMP_PIN, OUTPUT);
+  pinMode(MQ135_PIN, INPUT_PULLUP); // ប្រើ PULLUP ដើម្បីការពារ Signal រំខាន
+  pinMode(ONBOARD_FLASH_LED, OUTPUT);
+  
+  digitalWrite(SMART_LAMP_PIN, LOW);
+  digitalWrite(ONBOARD_FLASH_LED, LOW);
 
-  // Setup PWM Fan channel
-  ledcSetup(PWM_CHANNEL, PWM_FREQ, PWM_RES);
-  ledcAttachPin(PIN_FAN_PWM, PWM_CHANNEL);
-  ledcWrite(PWM_CHANNEL, 180); // Default ~70% speed
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
 
-  // Initialize Sensors
-  dht.begin();
-  analogReadResolution(12); // 12-bit ADC (0 - 4095)
+  sendTelegramAlert("🚀 <b>[ESP32-CAM]</b> Smart_Lamp & MQ135 Node ភ្ជាប់ជោគជ័យ! ✅");
 
-  // Connect to Wi-Fi
-  connectWiFi();
+  timer.setInterval(${intervalMs}L, sendMQ135Telemetry);
 }
 
-// ---------------------- 5. MAIN LOOP -------------------------------------
+// ---------------------- 8. MAIN LOOP -----------------------------------------
 void loop() {
-  // Maintain Wi-Fi connection
-  if (WiFi.status() != WL_CONNECTED) {
-    connectWiFi();
-  }
-
-  // Non-blocking timer: Sync with Cloud every ${intervalMs / 1000} seconds
-  if (millis() - lastTelemetryTime >= TELEMETRY_INTERVAL) {
-    lastTelemetryTime = millis();
-    
-    // 1. Read real hardware sensors
-    float temperature = dht.readTemperature();
-    float humidity    = dht.readHumidity();
-    
-    // Fallback if sensor disconnected
-    if (isnan(temperature) || isnan(humidity)) {
-      temperature = 28.5; // fallback test value
-      humidity = 65.0;
-      Serial.println("[WARN] DHT sensor read failed! Using fallback values.");
-    }
-
-    // Read Gas Analog (MQ-135 / MQ-2)
-    int rawGas = analogRead(PIN_GAS_MQ);
-    int gasPpm = map(rawGas, 0, 4095, 100, 1000); // Approximate PPM scale
-
-    // Read Soil Moisture Analog
-    int rawSoil = analogRead(PIN_SOIL_ADC);
-    // Invert scale: 4095 = dry (0%), 1200 = wet (100%)
-    float soilMoist = constrain(map(rawSoil, 3800, 1200, 0, 100), 0, 100);
-
-    // 2. Publish Sensor Telemetry to Cloud REST API
-    publishTelemetry(temperature, humidity, gasPpm, soilMoist);
-
-    // 3. Read Actuator Commands (Relays & PWM) from Cloud
-    syncActuatorCommands();
-  }
-}
-
-// ---------------------- 6. WI-FI CONNECTION ------------------------------
-void connectWiFi() {
-  Serial.print("[WiFi] Connecting to SSID: ");
-  Serial.println(WIFI_SSID);
-  
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 25) {
-    delay(500);
-    Serial.print(".");
-    attempts++;
-  }
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\\n[WiFi] Connected successfully!");
-    Serial.print("[WiFi] IP Address: ");
-    Serial.println(WiFi.localIP());
-    Serial.print("[WiFi] Signal RSSI: ");
-    Serial.print(WiFi.RSSI());
-    Serial.println(" dBm");
-  } else {
-    Serial.println("\\n[WiFi] Connection timeout. Retrying in background...");
-  }
-}
-
-// ---------------------- 7. PUBLISH SENSOR TELEMETRY ----------------------
-void publishTelemetry(float temp, float hum, int gas, float soil) {
-  if (WiFi.status() != WL_CONNECTED) return;
-
-  HTTPClient http;
-  
-  // Format URL query parameters
-  String url = String(SERVER_BASE) + "/api/iot/update?token=" + String(BLYNK_AUTH) +
-               "&v0=" + String(temp, 1) +
-               "&v1=" + String(hum, 1) +
-               "&v5=" + String(gas) +
-               "&v7=" + String(soil, 1) +
-               "&rssi=" + String(WiFi.RSSI()) +
-               "&ip=" + WiFi.localIP().toString();
-
-  http.begin(url);
-  int httpCode = http.GET();
-
-  if (httpCode == 200) {
-    Serial.printf("[Cloud Sync] Telemetry Published: Temp=%.1f C, Hum=%.1f %%, Gas=%d ppm, Soil=%.1f %%\n",
-                  temp, hum, gas, soil);
-  } else {
-    Serial.printf("[Cloud Sync] Error sending telemetry. HTTP Code: %d\n", httpCode);
-  }
-  http.end();
-}
-
-// ---------------------- 8. SYNC ACTUATOR COMMANDS ------------------------
-void syncActuatorCommands() {
-  if (WiFi.status() != WL_CONNECTED) return;
-
-  HTTPClient http;
-  String url = String(SERVER_BASE) + "/api/iot/all?token=" + String(BLYNK_AUTH);
-  
-  http.begin(url);
-  int httpCode = http.GET();
-
-  if (httpCode == 200) {
-    String payload = http.getString();
-    
-    // Parse Relay 1 (V2 - Water Pump)
-    if (payload.indexOf("\\"V2\\":1") > 0) {
-      digitalWrite(PIN_RELAY_1, HIGH);
-    } else if (payload.indexOf("\\"V2\\":0") > 0) {
-      digitalWrite(PIN_RELAY_1, LOW);
-    }
-
-    // Parse Relay 2 (V3 - Grow Light)
-    if (payload.indexOf("\\"V3\\":1") > 0) {
-      digitalWrite(PIN_RELAY_2, HIGH);
-    } else if (payload.indexOf("\\"V3\\":0") > 0) {
-      digitalWrite(PIN_RELAY_2, LOW);
-    }
-
-    // Parse Alarm Buzzer / Status LED (V6)
-    if (payload.indexOf("\\"V6\\":1") > 0) {
-      digitalWrite(PIN_STATUS_LED, HIGH);
-    } else if (payload.indexOf("\\"V6\\":0") > 0) {
-      digitalWrite(PIN_STATUS_LED, LOW);
-    }
-
-    // Parse Fan PWM (V4)
-    int fanIdx = payload.indexOf("\\"V4\\":");
-    if (fanIdx > 0) {
-      int fanSpeed = payload.substring(fanIdx + 5, fanIdx + 8).toInt();
-      int pwmDuty = map(constrain(fanSpeed, 0, 100), 0, 100, 0, 255);
-      ledcWrite(PWM_CHANNEL, pwmDuty);
-    }
-  }
-  http.end();
+  Blynk.run();
+  timer.run();
 }
 `;
 
-  // Dynamic ESP32-CAM AI-Thinker C++ Code
-  const esp32CamCppCode = `/*
- * ==============================================================================
- * Project: ESP32-CAM Smart Surveillance & IoT Cloud Node
- * Target Hardware: AI-Thinker ESP32-CAM (OV2640 + Flash LED + Cloud Sync)
- * Server URL: ${serverUrl}
- * Auth Token: ${token}
- * Features:
- *   - Live MJPEG Stream Server (Port 80) -> http://<ESP32-CAM-IP>/stream
- *   - Flash Light / Strobe LED Control on GPIO 4 via Virtual Pin V3 / V0
- *   - Motion / PIR Sensor on GPIO 13 -> Alert to Cloud V6
- *   - Heartbeat & RSSI Telemetry Sync with Cloud
- * ==============================================================================
+  // 2. ESP32 DevKit WROOM-32
+  const esp32DevKitCode = `/*
+ * Project: ESP32 DevKit WROOM-32 Smart_Lamp & MQ-135 Node
+ * Organization: SPS-PEH
  */
+#define BLYNK_TEMPLATE_ID   "${blynkTemplateId}"
+#define BLYNK_TEMPLATE_NAME "${blynkTemplateName}"
+#define BLYNK_AUTH_TOKEN    "${blynkAuthToken}"
 
-#include "esp_camera.h"
+#define BLYNK_PRINT Serial
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
-#include "esp_http_server.h"
+#include <UrlEncode.h>
+#include <BlynkSimpleEsp32.h>
 
-// ---------------------- 1. WIFI & CLOUD CREDENTIALS ----------------------
-const char* WIFI_SSID     = "${wifiSsid}";
-const char* WIFI_PASSWORD = "${wifiPass}";
-const char* BLYNK_AUTH    = "${token}";
-const char* SERVER_BASE   = "${serverUrl}";
+char ssid[] = "${wifiSsid}";
+char pass[] = "${wifiPass}";
+const char* TELEGRAM_BOT_TOKEN = "${telegramBotToken}";
+const char* TELEGRAM_CHAT_ID   = "${telegramChatId}";
 
-// ---------------------- 2. ESP32-CAM AI-THINKER PIN MAP -------------------
-#define PWDN_GPIO_NUM     32
-#define RESET_GPIO_NUM    -1
-#define XCLK_GPIO_NUM      0
-#define SIOD_GPIO_NUM     26
-#define SIOC_GPIO_NUM     27
+#define PIN_SMART_LAMP       ${lampPin}
+#define PIN_MQ135_DO         ${mq135Pin}
 
-#define Y9_GPIO_NUM       35
-#define Y8_GPIO_NUM       34
-#define Y7_GPIO_NUM       39
-#define Y6_GPIO_NUM       36
-#define Y5_GPIO_NUM       21
-#define Y4_GPIO_NUM       19
-#define Y3_GPIO_NUM       18
-#define Y2_GPIO_NUM        5
-#define VSYNC_GPIO_NUM    25
-#define HREF_GPIO_NUM     23
-#define PCLK_GPIO_NUM     22
+BlynkTimer timer;
+bool lastAlarmSent = false;
+unsigned long lastTgMsgTime = 0;
 
-// Actuator & Sensor Pins for ESP32-CAM
-#define FLASH_LED_PIN      4   // Built-in High-Power White Flash LED
-#define PIR_MOTION_PIN    13   // Optional PIR Motion Sensor Input
-#define STATUS_LED_PIN    33   // Built-in Small Red Status LED (Active LOW)
-
-httpd_handle_t stream_httpd = NULL;
-unsigned long lastSyncTime = 0;
-
-// ---------------------- 3. MJPEG STREAM HANDLER ---------------------------
-#define PART_BOUNDARY "12345678900000000000087654321"
-static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
-static const char* _STREAM_BOUNDARY = "\\r\\n--" PART_BOUNDARY "\\r\\n";
-static const char* _STREAM_PART = "Content-Type: image/jpeg\\r\\nContent-Length: %u\\r\\n\\r\\n";
-
-static esp_err_t stream_handler(httpd_req_t *req) {
-  camera_fb_t * fb = NULL;
-  esp_err_t res = ESP_OK;
-  size_t _jpg_buf_len = 0;
-  uint8_t * _jpg_buf = NULL;
-  char * part_buf[64];
-
-  res = httpd_resp_set_type(req, _STREAM_CONTENT_TYPE);
-  if (res != ESP_OK) return res;
-
-  while (true) {
-    fb = esp_camera_fb_get();
-    if (!fb) {
-      Serial.println("[CAM] Camera capture failed");
-      res = ESP_FAIL;
-    } else {
-      if (fb->format != PIXFORMAT_JPEG) {
-        bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
-        esp_camera_fb_return(fb);
-        fb = NULL;
-        if (!jpeg_converted) {
-          res = ESP_FAIL;
-        }
-      } else {
-        _jpg_buf_len = fb->len;
-        _jpg_buf = fb->buf;
-      }
-    }
-    if (res == ESP_OK) {
-      size_t hlen = snprintf((char *)part_buf, 64, _STREAM_PART, _jpg_buf_len);
-      res = httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
-    }
-    if (res == ESP_OK) {
-      res = httpd_resp_send_chunk(req, (const char *)_jpg_buf, _jpg_buf_len);
-    }
-    if (res == ESP_OK) {
-      res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
-    }
-    if (fb) {
-      esp_camera_fb_return(fb);
-      fb = NULL;
-      _jpg_buf = NULL;
-    } else if (_jpg_buf) {
-      free(_jpg_buf);
-      _jpg_buf = NULL;
-    }
-    if (res != ESP_OK) break;
-  }
-  return res;
+void sendTelegramAlert(String message) {
+  if (WiFi.status() != WL_CONNECTED) return;
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient https;
+  String url = "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) + 
+               "/sendMessage?chat_id=" + String(TELEGRAM_CHAT_ID) + 
+               "&text=" + urlEncode(message) + "&parse_mode=HTML";
+  https.begin(client, url);
+  https.GET();
+  https.end();
 }
 
-void startCameraServer() {
-  httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-  config.server_port = 80;
-
-  httpd_uri_t stream_uri = {
-    .uri       = "/stream",
-    .method    = HTTP_GET,
-    .handler   = stream_handler,
-    .user_ctx  = NULL
-  };
-
-  if (httpd_start(&stream_httpd, &config) == ESP_OK) {
-    httpd_register_uri_handler(stream_httpd, &stream_uri);
-    Serial.println("[CAM] MJPEG Camera Stream Server Started on Port 80 (/stream)");
+BLYNK_WRITE(V0) {
+  int val = param.asInt();
+  digitalWrite(PIN_SMART_LAMP, val == 1 ? HIGH : LOW);
+  if (val == 1) {
+    sendTelegramAlert("💡 <b>អំពូលកំពុងបើក</b>");
+  } else {
+    sendTelegramAlert("⭕ <b>អំពូលត្រូវបានបិទ</b>");
   }
 }
 
-// ---------------------- 4. SETUP FUNCTION --------------------------------
+void checkMQ135() {
+  int gasDigital = digitalRead(PIN_MQ135_DO);
+  bool isAlert = (gasDigital == HIGH);
+  Blynk.virtualWrite(V1, isAlert ? 1 : 0);
+  Blynk.virtualWrite(V8, WiFi.RSSI());
+
+  if (isAlert && (!lastAlarmSent || (millis() - lastTgMsgTime > 60000))) {
+    lastAlarmSent = true;
+    lastTgMsgTime = millis();
+    sendTelegramAlert("⚠️ <b>[ESP32 MQ-135 អាសន្នផ្សែងពុល]</b>\\n🚨 រកឃើញមានផ្សែងពុល!");
+  } else if (!isAlert && lastAlarmSent) {
+    lastAlarmSent = false;
+    sendTelegramAlert("✅ <b>[ESP32 MQ-135]</b> ខ្យល់ល្អឡើងវិញ!");
+  }
+}
+
 void setup() {
   Serial.begin(115200);
-  delay(1000);
-  Serial.println("\\n[SYSTEM] Starting ESP32-CAM Smart IoT Node...");
+  pinMode(PIN_SMART_LAMP, OUTPUT);
+  pinMode(PIN_MQ135_DO, INPUT);
+  digitalWrite(PIN_SMART_LAMP, LOW);
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+  timer.setInterval(2000L, checkMQ135);
+}
 
-  pinMode(FLASH_LED_PIN, OUTPUT);
-  pinMode(STATUS_LED_PIN, OUTPUT);
-  pinMode(PIR_MOTION_PIN, INPUT_PULLDOWN);
-  digitalWrite(FLASH_LED_PIN, LOW);
-  digitalWrite(STATUS_LED_PIN, HIGH); // OFF (Active LOW)
+void loop() {
+  Blynk.run();
+  timer.run();
+}
+`;
 
-  // Configure Camera
-  camera_config_t config;
-  config.ledc_channel = LEDC_CHANNEL_0;
-  config.ledc_timer = LEDC_TIMER_0;
-  config.pin_d0 = Y2_GPIO_NUM;
-  config.pin_d1 = Y3_GPIO_NUM;
-  config.pin_d2 = Y4_GPIO_NUM;
-  config.pin_d3 = Y5_GPIO_NUM;
-  config.pin_d4 = Y6_GPIO_NUM;
-  config.pin_d5 = Y7_GPIO_NUM;
-  config.pin_d6 = Y8_GPIO_NUM;
-  config.pin_d7 = Y9_GPIO_NUM;
-  config.pin_xclk = XCLK_GPIO_NUM;
-  config.pin_pclk = PCLK_GPIO_NUM;
-  config.pin_vsync = VSYNC_GPIO_NUM;
-  config.pin_href = HREF_GPIO_NUM;
-  config.pin_sscb_sda = SIOD_GPIO_NUM;
-  config.pin_sscb_scl = SIOC_GPIO_NUM;
-  config.pin_pwdn = PWDN_GPIO_NUM;
-  config.pin_reset = RESET_GPIO_NUM;
-  config.xclk_freq_hz = 20000000;
-  config.pixel_format = PIXFORMAT_JPEG;
+  // 3. Standalone Direct Web Server (No Blynk Required - Direct Browser to Chip Control)
+  const esp32DirectWebServerCode = `/*
+ * Project: ESP32 Standalone Web Server for Direct Browser-to-Chip Remote Control
+ * No Blynk Server required - Control via Local IP or mDNS
+ */
+#include <WiFi.h>
+#include <WebServer.h>
 
-  if (psramFound()) {
-    config.frame_size = FRAMESIZE_VGA;  // 640x480 (Smooth & Stable)
-    config.jpeg_quality = 12;
-    config.fb_count = 2;
-  } else {
-    config.frame_size = FRAMESIZE_QVGA; // 320x240
-    config.jpeg_quality = 14;
-    config.fb_count = 1;
-  }
+const char* ssid = "${wifiSsid}";
+const char* password = "${wifiPass}";
 
-  // Camera Init
-  esp_err_t err = esp_camera_init(&config);
-  if (err != ESP_OK) {
-    Serial.printf("[ERROR] Camera init failed with error 0x%x\\n", err);
+WebServer server(80);
+#define PIN_LAMP ${lampPin}
+#define PIN_MQ135 ${mq135Pin}
+
+void handleRoot() {
+  String html = "<html><body style='font-family:sans-serif;text-align:center;padding:40px;background:#0f172a;color:#fff;'>";
+  html += "<h2>💡 SPS-PEH ESP32 Direct Chip Controller</h2>";
+  html += "<p>Status: Lamp is " + String(digitalRead(PIN_LAMP) == HIGH ? "<b style='color:#10b981'>ON</b>" : "<b style='color:#ef4444'>OFF</b>") + "</p>";
+  html += "<a href='/control?pin=v0&val=1'><button style='padding:12px 24px;background:#10b981;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer;margin:5px;'>TURN ON (បើក)</button></a> ";
+  html += "<a href='/control?pin=v0&val=0'><button style='padding:12px 24px;background:#ef4444;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer;margin:5px;'>TURN OFF (បិទ)</button></a>";
+  html += "</body></html>";
+  server.send(200, "text/html", html);
+}
+
+void handleControl() {
+  if (server.hasArg("val")) {
+    int val = server.arg("val").toInt();
+    digitalWrite(PIN_LAMP, val == 1 ? HIGH : LOW);
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.send(200, "application/json", "{\\"success\\":true,\\"lamp\\":" + String(val) + "}");
     return;
   }
-
-  // Connect to Wi-Fi
-  connectWiFi();
-
-  // Start Live Streaming Web Server
-  startCameraServer();
+  server.send(400, "text/plain", "Missing val");
 }
 
-// ---------------------- 5. MAIN LOOP -------------------------------------
-void loop() {
-  if (WiFi.status() != WL_CONNECTED) {
-    connectWiFi();
-  }
+void setup() {
+  Serial.begin(115200);
+  pinMode(PIN_LAMP, OUTPUT);
+  pinMode(PIN_MQ135, INPUT_PULLUP);
+  digitalWrite(PIN_LAMP, LOW);
 
-  // Sync with Cloud every ${intervalMs / 1000} seconds
-  if (millis() - lastSyncTime >= ${intervalMs}) {
-    lastSyncTime = millis();
-    
-    int motionDetected = digitalRead(PIR_MOTION_PIN);
-    syncCloud(motionDetected);
-  }
-}
-
-void connectWiFi() {
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("[WiFi] Connecting to ");
-  Serial.println(WIFI_SSID);
-
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
-    attempts++;
   }
+  Serial.println("\\nWiFi connected. IP address: " + WiFi.localIP().toString());
 
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\\n[WiFi] Connected!");
-    Serial.print("[WiFi] Stream URL: http://");
-    Serial.print(WiFi.localIP());
-    Serial.println("/stream");
-  }
+  server.on("/", handleRoot);
+  server.on("/control", handleControl);
+  server.begin();
 }
 
-void syncCloud(int motion) {
-  if (WiFi.status() != WL_CONNECTED) return;
-
-  HTTPClient http;
-  
-  // 1. Send status & motion to Cloud
-  String streamUrl = "http://" + WiFi.localIP().toString() + "/stream";
-  String updateUrl = String(SERVER_BASE) + "/api/iot/update?token=" + String(BLYNK_AUTH) +
-                     "&v6=" + String(motion) +
-                     "&rssi=" + String(WiFi.RSSI()) +
-                     "&ip=" + WiFi.localIP().toString();
-
-  http.begin(updateUrl);
-  http.GET();
-  http.end();
-
-  // 2. Read Flash Light Command (V0 or V3) from Cloud
-  String getUrl = String(SERVER_BASE) + "/api/iot/get?token=" + String(BLYNK_AUTH) + "&pin=v0";
-  http.begin(getUrl);
-  int httpCode = http.GET();
-  if (httpCode == 200) {
-    String state = http.getString();
-    state.trim();
-    if (state == "1" || state == "\\"1\\"") {
-      digitalWrite(FLASH_LED_PIN, HIGH); // Turn ON Flash LED
-    } else {
-      digitalWrite(FLASH_LED_PIN, LOW);  // Turn OFF Flash LED
-    }
-  }
-  http.end();
+void loop() {
+  server.handleClient();
 }
 `;
 
-  const generatedCppCode = boardType === 'esp32_cam' ? esp32CamCppCode : standardCppCode;
+  // 4. ESP8266 NodeMCU Code
+  const esp8266CppCode = `/*
+ * Project: ESP8266 NodeMCU Smart_Lamp & MQ135
+ */
+#define BLYNK_TEMPLATE_ID   "${blynkTemplateId}"
+#define BLYNK_TEMPLATE_NAME "${blynkTemplateName}"
+#define BLYNK_AUTH_TOKEN    "${blynkAuthToken}"
 
-  const copyCode = () => {
-    navigator.clipboard.writeText(generatedCppCode);
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+
+char ssid[] = "${wifiSsid}";
+char pass[] = "${wifiPass}";
+
+#define PIN_LAMP D1
+#define PIN_MQ135 D2
+
+BlynkTimer timer;
+
+BLYNK_WRITE(V0) {
+  int val = param.asInt();
+  digitalWrite(PIN_LAMP, val == 1 ? HIGH : LOW);
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(PIN_LAMP, OUTPUT);
+  pinMode(PIN_MQ135, INPUT);
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+}
+
+void loop() {
+  Blynk.run();
+  timer.run();
+}
+`;
+
+  // Initialize custom code editor with the active template if empty
+  useEffect(() => {
+    const saved = localStorage.getItem('sps_peh_custom_arduino_code');
+    if (saved && saved.length > 50) {
+      setCustomCode(saved);
+    } else {
+      setCustomCode(esp32CamUrlEncodeCode);
+    }
+  }, []);
+
+  const handleTemplateChange = (preset: 'esp32_cam_urlencode' | 'esp32_devkit' | 'esp32_direct_webserver' | 'esp8266_nodemcu') => {
+    setEditorTemplatePreset(preset);
+    let newCode = esp32CamUrlEncodeCode;
+    if (preset === 'esp32_devkit') newCode = esp32DevKitCode;
+    if (preset === 'esp32_direct_webserver') newCode = esp32DirectWebServerCode;
+    if (preset === 'esp8266_nodemcu') newCode = esp8266CppCode;
+    setCustomCode(newCode);
+    localStorage.setItem('sps_peh_custom_arduino_code', newCode);
+  };
+
+  const saveCustomCode = () => {
+    localStorage.setItem('sps_peh_custom_arduino_code', customCode);
+    setCodeSavedNotification(true);
+    confetti({ particleCount: 35, spread: 60, origin: { y: 0.3 } });
+    setTimeout(() => setCodeSavedNotification(false), 2500);
+  };
+
+  const resetCustomCodeToCurrentTemplate = () => {
+    let base = esp32CamUrlEncodeCode;
+    if (editorTemplatePreset === 'esp32_devkit') base = esp32DevKitCode;
+    if (editorTemplatePreset === 'esp32_direct_webserver') base = esp32DirectWebServerCode;
+    if (editorTemplatePreset === 'esp8266_nodemcu') base = esp8266CppCode;
+    setCustomCode(base);
+    localStorage.setItem('sps_peh_custom_arduino_code', base);
+  };
+
+  // Quick insertion helpers for Live Code Editor
+  const insertSnippet = (snippet: string) => {
+    setCustomCode((prev) => prev + '\n' + snippet);
+  };
+
+  // Send Remote Command to Chip (Supports Blynk Cloud REST API, Local IP Webhook, & Web Serial)
+  const dispatchChipCommand = async (pin: string, value: number) => {
+    setRemoteDispatching(true);
+    setRemoteStatusMessage(null);
+
+    try {
+      if (pin === 'V0') setRemoteLampState(value);
+      if (pin === 'V4') setRemoteFlashState(value);
+      if (pin === 'V1') setRemoteGasSimState(value);
+
+      // Web Serial Mode
+      if (remoteDispatchMode === 'web_serial' && serialConnected && serialPort) {
+        const encoder = new TextEncoder();
+        const writer = serialPort.writable.getWriter();
+        await writer.write(encoder.encode(`${pin}=${value}\n`));
+        writer.releaseLock();
+        setRemoteStatusMessage(`[Web Serial] Sent: ${pin}=${value}`);
+        return;
+      }
+
+      // Backend / Blynk Cloud / Local IP Forwarder
+      const response = await fetch('/api/iot/chip/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deviceId: device?.id || 'dev_smart_lamp_mq135',
+          pin,
+          value,
+          blynkToken: blynkAuthToken,
+          chipIp: remoteDispatchMode === 'local_ip' ? chipTargetIp : undefined,
+          sendTelegram: pin === 'V0',
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setRemoteStatusMessage(
+          lang === 'km'
+            ? `✅ បានបញ្ជាទៅ Chip ជោគជ័យ: ${pin} -> ${value === 1 ? 'ON (បើក)' : 'OFF (បិទ)'}`
+            : `✅ Dispatched to Chip successfully: ${pin} -> ${value === 1 ? 'ON' : 'OFF'}`
+        );
+        confetti({ particleCount: 40, spread: 60, origin: { y: 0.5 } });
+      } else {
+        setRemoteStatusMessage(`❌ Error: ${data.error || 'Failed to dispatch'}`);
+      }
+    } catch (err: any) {
+      setRemoteStatusMessage(`❌ Error: ${err?.message || 'Network dispatch failed'}`);
+    } finally {
+      setRemoteDispatching(false);
+    }
+  };
+
+  // Web Serial API connection handler
+  const handleConnectWebSerial = async () => {
+    if (!('serial' in navigator)) {
+      alert(lang === 'km' 
+        ? 'កម្មវិធីរុករករបស់អ្នកមិនទាន់គាំទ្រ Web Serial API ទេ (សូមប្រើ Chrome ឬ Edge លើ PC ឬ Android OTG)' 
+        : 'Web Serial API not supported in this browser. Please use Chrome/Edge on Desktop or Android OTG.');
+      return;
+    }
+
+    try {
+      const port = await (navigator as any).serial.requestPort();
+      await port.open({ baudRate: 115200 });
+      setSerialPort(port);
+      setSerialConnected(true);
+      setSerialLogs((prev) => [...prev, `[Connected] Port opened at 115200 baud`]);
+
+      const textDecoder = new TextDecoderStream();
+      port.readable.pipeTo(textDecoder.writable);
+      const reader = textDecoder.readable.getReader();
+      serialReaderRef.current = reader;
+
+      readSerialStream(reader);
+    } catch (err: any) {
+      console.error(err);
+      alert('Serial connection failed: ' + err.message);
+    }
+  };
+
+  const readSerialStream = async (reader: any) => {
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (value) {
+          setSerialLogs((prev) => [...prev.slice(-80), value]);
+        }
+      }
+    } catch (err) {
+      console.log('Serial read error:', err);
+    }
+  };
+
+  const handleDisconnectWebSerial = async () => {
+    if (serialReaderRef.current) {
+      await serialReaderRef.current.cancel();
+    }
+    if (serialPort) {
+      await serialPort.close();
+      setSerialPort(null);
+      setSerialConnected(false);
+      setSerialLogs((prev) => [...prev, '[Disconnected] Serial port closed']);
+    }
+  };
+
+  const sendCustomSerialCommand = async () => {
+    if (!serialInput.trim() || !serialPort || !serialConnected) return;
+    try {
+      const encoder = new TextEncoder();
+      const writer = serialPort.writable.getWriter();
+      await writer.write(encoder.encode(serialInput + '\n'));
+      writer.releaseLock();
+      setSerialLogs((prev) => [...prev, `> ${serialInput}`]);
+      setSerialInput('');
+    } catch (err: any) {
+      console.error(err);
+    }
+  };
+
+  const sendTestTelegram = async () => {
+    setTelegramTesting(true);
+    setTelegramStatus(null);
+    try {
+      const res = await fetch('/api/telegram/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          botToken: telegramBotToken,
+          chatId: telegramChatId,
+          message: `🔔 <b>[SPS-PEH IoT Cloud Notification]</b>\n\n✅ <b>Smart_Lamp & MQ135 System Online!</b>\n💡 <b>Smart_Lamp Relay:</b> GPIO ${lampPin} (Blynk V0)\n💨 <b>MQ-135 Gas Sensor:</b> GPIO ${mq135Pin} (Blynk V1)\n📶 <b>WiFi Network:</b> ${wifiSsid}\n⏰ <b>Timestamp:</b> ${new Date().toLocaleTimeString()}\n\n<i>សារសាកល្បងនេះត្រូវបានផ្ញើចេញពី SPS-PEH IoT Dashboard ដោយជោគជ័យ។</i>`,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTelegramStatus('success');
+        confetti({ particleCount: 50, spread: 70, origin: { y: 0.4 } });
+      } else {
+        setTelegramStatus('error: ' + (data.error || 'Failed to send'));
+      }
+    } catch (err: any) {
+      setTelegramStatus('error: ' + (err.message || 'Network error'));
+    } finally {
+      setTelegramTesting(false);
+    }
+  };
+
+  const blynkHeaderSnippet = `// Fill-in information from your Blynk Template here
+#define BLYNK_TEMPLATE_ID   "${blynkTemplateId}"
+#define BLYNK_TEMPLATE_NAME "${blynkTemplateName}"
+#define BLYNK_AUTH_TOKEN    "${blynkAuthToken}"
+
+// Telegram Bot Credentials
+#define TELEGRAM_BOT_TOKEN  "${telegramBotToken}"
+#define TELEGRAM_CHAT_ID    "${telegramChatId}"`;
+
+  const copyCustomCode = () => {
+    navigator.clipboard.writeText(customCode);
     setCopiedCode(true);
     confetti({ particleCount: 40, spread: 70, origin: { y: 0.3 } });
     setTimeout(() => setCopiedCode(false), 2500);
   };
 
+  const copyDefines = () => {
+    navigator.clipboard.writeText(blynkHeaderSnippet);
+    setCopiedDefines(true);
+    confetti({ particleCount: 30, spread: 60, origin: { y: 0.25 } });
+    setTimeout(() => setCopiedDefines(false), 2500);
+  };
+
   const downloadInoFile = () => {
-    const blob = new Blob([generatedCppCode], { type: 'text/plain;charset=utf-8' });
+    const blob = new Blob([customCode], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `ESP32_Blynk_Cloud_${device?.name.replace(/[^a-zA-Z0-9]/g, '_') || 'Firmware'}.ino`;
+    link.download = `Blynk_${blynkTemplateId}_${blynkTemplateName.replace(/[^a-zA-Z0-9]/g, '_')}.ino`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const sampleCurl = `curl -X GET "${serverUrl}/api/iot/update?token=${token}&v0=29.4&v1=68.5&v5=350&v7=55.0"`;
+  const sampleCurl = `curl -X GET "${serverUrl}/api/iot/update?token=${blynkAuthToken}&v0=1&v1=92&v2=29.4&v5=350&v6=68.5"`;
 
   const copyCurlCmd = () => {
     navigator.clipboard.writeText(sampleCurl);
@@ -536,26 +663,26 @@ void syncCloud(int motion) {
 
   return (
     <div id="esp32-firmware-studio-view" className="space-y-5">
-      {/* Header */}
+      {/* 1. Top Header Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800 rounded-2xl p-5 shadow-xl">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 shadow-inner">
               <Code2 className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-lg sm:text-xl font-extrabold text-white">
-                  {lang === 'km' ? 'ESP32 Microcontroller Firmware (Arduino C++)' : 'ESP32 Arduino C++ Firmware Studio'}
+                  {lang === 'km' ? 'Blynk IoT & ESP32 Code Studio' : 'Blynk IoT & ESP32 Code Studio'}
                 </h1>
                 <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
-                  READY TO FLASH
+                  LIVE EDITOR & REMOTE CHIP CONTROL
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
                 {lang === 'km'
-                  ? 'កូដពេញលេញសម្រាប់ ESP32 ភ្ជាប់ Wi-Fi, អានតម្លៃ Sensor (V0, V1, V5, V7) និងបញ្ជា Relay (V2, V3, V4, V6) ជាមួយ Cloud Console'
-                  : 'Production-ready C++ firmware for ESP32. Includes Wi-Fi auto-reconnect, bidirectional REST synchronization, and sensor drivers.'}
+                  ? 'កែសម្រួលកូដ Arduino C++ ផ្ទាល់ក្នុងកម្មវិធី និងបញ្ជាទៅកាន់ Chip (ESP32/ESP32-CAM) ពីគ្រប់ទូរស័ព្ទ កុំព្យូទ័រ ឬ Tablet'
+                  : 'Live In-Browser C++ Code Editor with direct cross-device remote control to ESP32 / ESP32-CAM microcontrollers.'}
               </p>
             </div>
           </div>
@@ -564,11 +691,11 @@ void syncCloud(int motion) {
           <div className="flex items-center gap-2">
             <button
               id="copy-firmware-code-btn"
-              onClick={copyCode}
+              onClick={copyCustomCode}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition"
             >
               {copiedCode ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-              <span>{copiedCode ? (lang === 'km' ? 'បានចម្លងកូដ!' : 'Copied C++ Code!') : (lang === 'km' ? 'ចម្លងកូដ C++' : 'Copy C++ Code')}</span>
+              <span>{copiedCode ? (lang === 'km' ? 'បានចម្លងកូដ!' : 'Copied Code!') : (lang === 'km' ? 'ចម្លងកូដ' : 'Copy Code')}</span>
             </button>
 
             <button
@@ -583,19 +710,22 @@ void syncCloud(int motion) {
         </div>
 
         {/* Sub Navigation tabs */}
-        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-800/80 text-xs font-semibold">
+        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-800/80 text-xs font-semibold overflow-x-auto pb-1">
           {[
-            { key: 'code', label: 'Arduino C++ Code', labelKhmer: 'កូដ C++ ពេញលេញ', icon: <Code2 className="w-3.5 h-3.5" /> },
+            { key: 'editor', label: 'Live Code Editor', labelKhmer: 'កែសម្រួល & ផ្លាស់ប្តូរកូដភ្លាមៗ', icon: <Edit3 className="w-3.5 h-3.5 text-amber-400" /> },
+            { key: 'remote', label: 'Remote Chip Controller', labelKhmer: 'បញ្ជាទៅ Chip ពីគ្រប់ Device', icon: <Radio className="w-3.5 h-3.5 text-emerald-400" /> },
+            { key: 'telegram', label: 'Telegram Bot Alerts', labelKhmer: 'ប្រព័ន្ធ Telegram Alert', icon: <Bot className="w-3.5 h-3.5 text-sky-400" /> },
+            { key: 'code', label: 'C++ Code View', labelKhmer: 'ទិដ្ឋភាពកូដ C++', icon: <Code2 className="w-3.5 h-3.5" /> },
             { key: 'guide', label: 'Flashing Guide', labelKhmer: 'ការដំឡើង & Flash', icon: <BookOpen className="w-3.5 h-3.5" /> },
             { key: 'wiring', label: 'Hardware Wiring', labelKhmer: 'តារាងតខ្សែ GPIO', icon: <Layers className="w-3.5 h-3.5" /> },
-            { key: 'api', label: 'REST API / cURL Test', labelKhmer: 'តេស្ត API & cURL', icon: <Terminal className="w-3.5 h-3.5" /> },
+            { key: 'api', label: 'REST API & Webhook', labelKhmer: 'តេស្ត API & cURL', icon: <Terminal className="w-3.5 h-3.5" /> },
           ].map(tab => (
             <button
               key={tab.key}
               onClick={() => setActiveSubTab(tab.key as any)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition whitespace-nowrap ${
                 activeSubTab === tab.key
-                  ? 'bg-slate-800 text-emerald-400 border border-slate-700 font-bold'
+                  ? 'bg-slate-800 text-emerald-400 border border-slate-700 font-bold shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -606,438 +736,808 @@ void syncCloud(int motion) {
         </div>
       </div>
 
-      {/* Interactive Config Bar */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
-        {/* Board Selection Switcher */}
+      {/* 2. PROMINENT BLYNK TEMPLATE CREDENTIALS BOX (#define Snippet) */}
+      <div className="bg-slate-900/95 border-2 border-emerald-500/40 rounded-2xl p-5 shadow-2xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-          <div>
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-              <Cpu className="w-4 h-4 text-emerald-400" />
-              {lang === 'km' ? 'ជ្រើសរើសប្រភេទក្តារ ESP32 Board Target' : 'Target ESP32 Hardware Architecture'}
-            </h3>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              {lang === 'km' ? 'គាំទ្រ ESP32 ស្តង់ដារ និង ESP32-CAM AI-Thinker (OV2640 + Flash Light)' : 'Switch between Standard ESP32 or ESP32-CAM (AI-Thinker)'}
-            </p>
-          </div>
-
-          <div className="inline-flex bg-slate-950 p-1 rounded-xl border border-slate-800 self-start sm:self-auto">
-            <button
-              onClick={() => setBoardType('esp32_standard')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
-                boardType === 'esp32_standard'
-                  ? 'bg-emerald-500 text-slate-950 shadow-md font-bold'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Cpu className="w-3.5 h-3.5" />
-              <span>ESP32 (Standard / DevKit)</span>
-            </button>
-            <button
-              onClick={() => setBoardType('esp32_cam')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
-                boardType === 'esp32_cam'
-                  ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>ESP32-CAM (AI-Thinker)</span>
-            </button>
-          </div>
-        </div>
-
-        {boardType === 'esp32_cam' && (
-          <div className="bg-cyan-950/40 border border-cyan-500/30 rounded-xl p-3 text-xs text-cyan-200 flex items-start gap-2.5">
-            <Sparkles className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+              <KeyRound className="w-4 h-4" />
+            </div>
             <div>
-              <strong className="text-cyan-300 font-bold block mb-0.5">
-                {lang === 'km' ? 'ESP32-CAM AI-Thinker Module ត្រូវបានបើកដំណើរការ!' : 'ESP32-CAM Architecture Activated!'}
-              </strong>
-              <span>
+              <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                <span>{lang === 'km' ? 'ព័ត៌មានសម្គាល់ Blynk Template (Blynk Device Info)' : 'Blynk Device Info & #define Credentials'}</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-700">
+                  TOP 3 LINES
+                </span>
+              </h2>
+              <p className="text-xs text-slate-400">
                 {lang === 'km'
-                  ? 'កូដខាងក្រោមរួមបញ្ចូល Live MJPEG Video Streaming Web Server (Port 80), ការបញ្ជា Flash Light (GPIO 4), Motion Sensor (GPIO 13) និងការ Sync ទិន្នន័យជាមួយ Cloud។'
-                  : 'Includes full OV2640 camera drivers, MJPEG live streaming on Port 80 (/stream), Onboard White Flash LED control on GPIO 4, and Cloud REST synchronization.'}
-              </span>
+                  ? 'អ្នកអាចកែសម្រួល ឬចម្លង ៣បន្ទាត់នេះទៅដាក់លើគេបង្អស់នៃកូដ Arduino IDE'
+                  : 'Copy and paste these 3 lines at the very top of your Arduino sketch.'}
+              </p>
             </div>
           </div>
-        )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          <button
+            onClick={copyDefines}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs font-bold transition shadow-sm self-start sm:self-auto"
+          >
+            {copiedDefines ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+            <span>{copiedDefines ? (lang === 'km' ? 'បានចម្លង 3 បន្ទាត់!' : 'Copied 3 Defines!') : (lang === 'km' ? 'ចម្លង 3 បន្ទាត់ #define' : 'Copy 3 #define Lines')}</span>
+          </button>
+        </div>
+
+        {/* Input fields to edit template credentials */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <label className="text-slate-400 block mb-1 font-semibold">Wi-Fi SSID:</label>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+              #define BLYNK_TEMPLATE_ID
+            </label>
             <input
               type="text"
-              value={wifiSsid}
-              onChange={(e) => setWifiSsid(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white font-mono focus:outline-none focus:border-emerald-500"
+              value={blynkTemplateId}
+              onChange={(e) => {
+                setBlynkTemplateId(e.target.value);
+                setCustomCode((prev) => prev.replace(/#define BLYNK_TEMPLATE_ID\s+"[^"]*"/, `#define BLYNK_TEMPLATE_ID    "${e.target.value}"`));
+              }}
+              className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-2 text-emerald-400 font-mono text-xs font-bold focus:outline-none"
+              placeholder="e.g. TMPL_SMART_LAMP_MQ135"
             />
           </div>
 
           <div>
-            <label className="text-slate-400 block mb-1 font-semibold">Wi-Fi Password:</label>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+              #define BLYNK_TEMPLATE_NAME
+            </label>
             <input
               type="text"
-              value={wifiPass}
-              onChange={(e) => setWifiPass(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white font-mono focus:outline-none focus:border-emerald-500"
+              value={blynkTemplateName}
+              onChange={(e) => {
+                setBlynkTemplateName(e.target.value);
+                setCustomCode((prev) => prev.replace(/#define BLYNK_TEMPLATE_NAME\s+"[^"]*"/, `#define BLYNK_TEMPLATE_NAME  "${e.target.value}"`));
+              }}
+              className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none"
+              placeholder="e.g. Smart_Lamp & MQ135"
             />
           </div>
 
           <div>
-            <label className="text-slate-400 block mb-1 font-semibold">Server Host URL:</label>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+              #define BLYNK_AUTH_TOKEN
+            </label>
             <input
               type="text"
-              value={serverUrl}
-              onChange={(e) => setServerUrl(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-emerald-400 font-mono text-xs focus:outline-none focus:border-emerald-500"
+              value={blynkAuthToken}
+              onChange={(e) => {
+                setBlynkAuthToken(e.target.value);
+                setCustomCode((prev) => prev.replace(/#define BLYNK_AUTH_TOKEN\s+"[^"]*"/, `#define BLYNK_AUTH_TOKEN     "${e.target.value}"`));
+              }}
+              className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-2 text-cyan-400 font-mono text-xs font-bold focus:outline-none"
+              placeholder="e.g. YOUR_BLYNK_AUTH_TOKEN"
             />
-          </div>
-
-          <div>
-            <label className="text-slate-400 block mb-1 font-semibold">Sync Interval (ms):</label>
-            <select
-              value={intervalMs}
-              onChange={(e) => setIntervalMs(Number(e.target.value))}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white font-mono focus:outline-none focus:border-emerald-500"
-            >
-              <option value={1000}>1000 ms (1 sec)</option>
-              <option value={2000}>2000 ms (2 sec - Recommended)</option>
-              <option value={5000}>5000 ms (5 sec)</option>
-              <option value={10000}>10000 ms (10 sec)</option>
-            </select>
           </div>
         </div>
 
-        {/* Pin Mapping inputs row for standard ESP32 */}
-        {boardType === 'esp32_standard' && (
-          <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 pt-3 border-t border-slate-800/60 text-[11px]">
-            <div>
-              <span className="text-slate-400 block">DHT Pin:</span>
-              <input
-                type="number"
-                value={dhtPin}
-                onChange={(e) => setDhtPin(Number(e.target.value))}
-                className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-orange-400 font-mono"
-              />
-            </div>
-            <div>
-              <span className="text-slate-400 block">Relay 1 Pin:</span>
-              <input
-                type="number"
-                value={relay1Pin}
-                onChange={(e) => setRelay1Pin(Number(e.target.value))}
-                className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-emerald-400 font-mono"
-              />
-            </div>
-            <div>
-              <span className="text-slate-400 block">Relay 2 Pin:</span>
-              <input
-                type="number"
-                value={relay2Pin}
-                onChange={(e) => setRelay2Pin(Number(e.target.value))}
-                className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-amber-400 font-mono"
-              />
-            </div>
-            <div>
-              <span className="text-slate-400 block">Fan PWM Pin:</span>
-              <input
-                type="number"
-                value={fanPwmPin}
-                onChange={(e) => setFanPwmPin(Number(e.target.value))}
-                className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-blue-400 font-mono"
-              />
-            </div>
-            <div>
-              <span className="text-slate-400 block">MQ Gas Pin:</span>
-              <input
-                type="number"
-                value={gasPin}
-                onChange={(e) => setGasPin(Number(e.target.value))}
-                className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-purple-400 font-mono"
-              />
-            </div>
-            <div>
-              <span className="text-slate-400 block">Soil ADC Pin:</span>
-              <input
-                type="number"
-                value={soilPin}
-                onChange={(e) => setSoilPin(Number(e.target.value))}
-                className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-teal-400 font-mono"
-              />
-            </div>
-          </div>
-        )}
+        {/* Live Code Preview snippet */}
+        <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs text-slate-300 relative select-all overflow-x-auto">
+          <pre className="text-emerald-400 font-bold">{blynkHeaderSnippet}</pre>
+        </div>
       </div>
 
-      {/* SUB TAB 1: CODE VIEWER */}
-      {activeSubTab === 'code' && (
-        <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
-          <div className="bg-slate-900/90 px-4 py-2.5 border-b border-slate-800 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="flex gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-red-500/80 inline-block" />
-                <span className="w-3 h-3 rounded-full bg-yellow-500/80 inline-block" />
-                <span className="w-3 h-3 rounded-full bg-green-500/80 inline-block" />
+      {/* SUB TAB 1: LIVE IN-APP CODE EDITOR */}
+      {activeSubTab === 'editor' && (
+        <div className="bg-slate-900/95 border border-slate-800 rounded-2xl p-5 shadow-2xl space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                <Edit3 className="w-4 h-4" />
               </div>
-              <span className="text-xs font-mono text-slate-300 font-semibold ml-2">
-                ESP32_Blynk_Cloud_Console.ino
-              </span>
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <span>{lang === 'km' ? 'កន្លែងកែសម្រួល & ផ្លាស់ប្ដូរកូដ Arduino C++ ផ្ទាល់' : 'Live In-App Arduino C++ Code Editor'}</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-700">
+                    INTERACTIVE IDE
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {lang === 'km'
+                    ? 'អ្នកអាចសរសេរ កែសម្រួល ឬបិទភ្ជាប់កូដ C++ របស់អ្នកនៅទីនេះ ហើយរក្សាទុក ឬទាញយកភ្លាមៗ'
+                    : 'Edit, customize, or paste your Arduino C++ code here with live formatting and instant download.'}
+                </p>
+              </div>
             </div>
 
-            <button
-              onClick={copyCode}
-              className="flex items-center gap-1 text-xs text-slate-400 hover:text-emerald-400 transition"
-            >
-              {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copiedCode ? 'Copied' : 'Copy'}</span>
-            </button>
+            {/* Template Presets */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-slate-400 font-semibold">{lang === 'km' ? 'គំរូកូដ Template:' : 'Preset Template:'}</span>
+              <button
+                onClick={() => handleTemplateChange('esp32_cam_urlencode')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition border ${
+                  editorTemplatePreset === 'esp32_cam_urlencode'
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
+                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                }`}
+              >
+                ESP32-CAM (AI-Thinker) + UrlEncode
+              </button>
+              <button
+                onClick={() => handleTemplateChange('esp32_devkit')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition border ${
+                  editorTemplatePreset === 'esp32_devkit'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
+                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                }`}
+              >
+                ESP32 DevKit WROOM
+              </button>
+              <button
+                onClick={() => handleTemplateChange('esp32_direct_webserver')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition border ${
+                  editorTemplatePreset === 'esp32_direct_webserver'
+                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
+                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                }`}
+              >
+                Direct WebServer (No Blynk)
+              </button>
+            </div>
           </div>
 
-          <div className="p-4 overflow-x-auto max-h-[600px] text-xs font-mono leading-relaxed text-slate-300 select-all">
-            <pre>{generatedCppCode}</pre>
+          {/* Quick Snippet Injector Toolbar */}
+          <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-xs">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-bold text-slate-400 mr-1">{lang === 'km' ? 'បញ្ចូលរហ័ស:' : 'Insert / Replace:'}</span>
+              <button
+                onClick={() => {
+                  setCustomCode((prev) =>
+                    prev.replace(/char ssid\[\] = "[^"]*";/, `char ssid[] = "${wifiSsid}";`)
+                        .replace(/char pass\[\] = "[^"]*";/, `char pass[] = "${wifiPass}";`)
+                  );
+                }}
+                className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-[11px] font-mono transition"
+              >
+                📶 Update WiFi ({wifiSsid})
+              </button>
+              <button
+                onClick={() => {
+                  setCustomCode((prev) =>
+                    prev.replace(/const char\* TELEGRAM_BOT_TOKEN = "[^"]*";/, `const char\* TELEGRAM_BOT_TOKEN = "${telegramBotToken}";`)
+                        .replace(/const char\* TELEGRAM_CHAT_ID   = "[^"]*";/, `const char\* TELEGRAM_CHAT_ID   = "${telegramChatId}";`)
+                  );
+                }}
+                className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-sky-300 rounded-lg text-[11px] font-mono transition"
+              >
+                🤖 Update Telegram Bot Token
+              </button>
+              <button
+                onClick={() => {
+                  insertSnippet(`// Added Custom Virtual Pin\nBLYNK_WRITE(V3) {\n  int val = param.asInt();\n  Serial.println(val);\n}`);
+                }}
+                className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-emerald-300 rounded-lg text-[11px] font-mono transition"
+              >
+                + Add BLYNK_WRITE(V3)
+              </button>
+            </div>
+
+            {/* Font Size & Controls */}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-slate-400">Size:</span>
+              {[12, 13, 14, 16].map((sz) => (
+                <button
+                  key={sz}
+                  onClick={() => setEditorFontSize(sz)}
+                  className={`px-1.5 py-0.5 rounded text-[11px] font-mono ${
+                    editorFontSize === sz ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {sz}px
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Main Interactive Code Editor Box */}
+          <div className="relative rounded-xl border-2 border-slate-800 focus-within:border-emerald-500/70 overflow-hidden bg-slate-950 shadow-inner">
+            <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900 border-b border-slate-800 text-[11px] text-slate-400 font-mono">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span>
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span>
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+                <span className="text-slate-300 font-semibold ml-2">firmware.ino (Arduino C++)</span>
+              </div>
+              <div className="flex items-center gap-3 text-slate-400">
+                <span>{customCode.split('\n').length} Lines</span>
+                <span>{customCode.length} Characters</span>
+              </div>
+            </div>
+
+            <textarea
+              value={customCode}
+              onChange={(e) => setCustomCode(e.target.value)}
+              spellCheck={false}
+              className="w-full h-[520px] bg-slate-950 p-4 font-mono text-emerald-400 focus:outline-none resize-y selection:bg-emerald-500/30 leading-relaxed border-none"
+              style={{ fontSize: `${editorFontSize}px` }}
+            />
+          </div>
+
+          {/* Editor Action Buttons */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={saveCustomCode}
+                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition"
+              >
+                <Save className="w-4 h-4" />
+                <span>{codeSavedNotification ? (lang === 'km' ? 'បានរក្សាទុក!' : 'Code Saved!') : (lang === 'km' ? 'រក្សាទុកកូដ (Save)' : 'Save Code')}</span>
+              </button>
+
+              <button
+                onClick={resetCustomCodeToCurrentTemplate}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold border border-slate-700 transition"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+                <span>{lang === 'km' ? 'កំណត់ឡើងវិញ (Reset)' : 'Reset to Template'}</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setActiveSubTab('remote')}
+                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-cyan-500/20 transition"
+              >
+                <Radio className="w-4 h-4" />
+                <span>{lang === 'km' ? 'តេស្តបញ្ជាទៅ Chip ផ្ទាល់' : 'Test Control Physical Chip'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* SUB TAB 2: FLASHING & ARDUINO IDE GUIDE */}
-      {activeSubTab === 'guide' && (
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4 text-xs leading-relaxed text-slate-300">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-emerald-400" />
-            {boardType === 'esp32_cam'
-              ? (lang === 'km' ? 'របៀប Flash Firmware ទៅក្នុង ESP32-CAM តាម FTDI Programmer' : 'How to Flash ESP32-CAM via FTDI USB-to-TTL')
-              : (lang === 'km' ? 'របៀបបញ្ចូលកូដ (Flash Firmware) ទៅក្នុង ESP32 តាម Arduino IDE' : 'How to Flash ESP32 via Arduino IDE')}
-          </h3>
-
-          {boardType === 'esp32_cam' ? (
-            <div className="space-y-3">
-              <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
-                <strong className="text-cyan-400 font-semibold block">
-                  {lang === 'km' ? 'ជំហានទី ១: តខ្សែរវាង FTDI Programmer និង ESP32-CAM' : 'Step 1: Wire FTDI Programmer to ESP32-CAM'}
-                </strong>
-                <p className="text-slate-400">
-                  {lang === 'km'
-                    ? 'ដោយសារ ESP32-CAM គ្មានរន្ធ USB ផ្ទាល់ខ្លួន អ្នកត្រូវប្រើ USB-to-TTL FTDI Programmer (5V)៖'
-                    : 'Since ESP32-CAM lacks built-in USB, use a 5V FTDI Programmer:'}
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px] bg-slate-900/80 p-2.5 rounded-lg">
-                  <div><span className="text-slate-400">FTDI VCC (5V)</span> &rarr; <span className="text-red-400">ESP32 5V</span></div>
-                  <div><span className="text-slate-400">FTDI GND</span> &rarr; <span className="text-slate-300">ESP32 GND</span></div>
-                  <div><span className="text-slate-400">FTDI TX</span> &rarr; <span className="text-emerald-400">ESP32 U0R (GPIO 3)</span></div>
-                  <div><span className="text-slate-400">FTDI RX</span> &rarr; <span className="text-blue-400">ESP32 U0T (GPIO 1)</span></div>
-                </div>
-                <div className="p-2 bg-amber-950/40 border border-amber-500/30 rounded text-amber-300 text-[11px]">
-                  <strong>⚠️ សំខាន់ខ្លាំង (Flash Mode):</strong> ភ្ជាប់ខ្សែ <strong>GPIO 0 ទៅ GND</strong> មុនពេលដោត USB ដើម្បីឱ្យ ESP32-CAM ចូល Flash Mode។ ពេល Flash ចប់ ដកខ្សែ GPIO 0 ចេញ រួចចុចប៊ូតុង Reset លើ Board!
-                </div>
+      {/* SUB TAB 2: UNIVERSAL CROSS-DEVICE REMOTE CHIP CONTROLLER */}
+      {activeSubTab === 'remote' && (
+        <div className="bg-slate-900/95 border border-slate-800 rounded-2xl p-5 shadow-2xl space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <Radio className="w-4 h-4" />
               </div>
-
-              <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-1.5">
-                <strong className="text-cyan-400 font-semibold block">
-                  {lang === 'km' ? 'ជំហានទី ២: កំណត់ Board ក្នុង Arduino IDE' : 'Step 2: Arduino IDE Board Settings'}
-                </strong>
-                <ul className="list-disc list-inside space-y-1 text-slate-300 ml-2">
-                  <li>Board: <strong>AI Thinker ESP32-CAM</strong></li>
-                  <li>CPU Frequency: <strong>240MHz (WiFi/BT)</strong></li>
-                  <li>Flash Frequency: <strong>80MHz</strong></li>
-                  <li>Flash Mode: <strong>QIO</strong></li>
-                  <li>Partition Scheme: <strong>Huge APP (3MB No OTA/1MB SPIFFS)</strong></li>
-                  <li>PSRAM: <strong>Enabled</strong></li>
-                </ul>
-              </div>
-
-              <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-1.5">
-                <strong className="text-cyan-400 font-semibold block">
-                  {lang === 'km' ? 'ជំហានទី ៣: ចុច Upload និងពិនិត្យ Stream' : 'Step 3: Upload & Open Live Stream'}
-                </strong>
-                <p className="text-slate-400">
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <span>{lang === 'km' ? 'បញ្ជាពីគ្រប់ Device តាមកម្មវិធីទៅកាន់ Chip' : 'Universal Cross-Device Remote Chip Controller'}</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-700">
+                    REAL-TIME SYNC
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-400">
                   {lang === 'km'
-                    ? 'ចុច Upload &rarr; ពេលចប់ ដកខ្សែ GPIO 0 ចេញពីរន្ធ GND &rarr; ចុចប៊ូតុង Reset &rarr; បើក Serial Monitor (115200 baud) អ្នកនឹងឃើញ Stream IP Address ឧទាហរណ៍៖ http://192.168.1.120/stream'
-                    : 'Click Upload. When finished, disconnect GPIO 0 from GND, press RST button. Open Serial Monitor at 115200 to view your Live Stream URL (e.g. http://192.168.1.120/stream).'}
+                    ? 'បញ្ជាអំពូល (Smart_Lamp), Flash LED, Sensor ឬ Reboot ESP32 ពីគ្រប់ទូរស័ព្ទ កុំព្យូទ័រ ឬ Tablet តាមរយៈ Blynk Cloud, Local IP ឬ Web Serial'
+                    : 'Dispatch commands directly to physical ESP32 / ESP32-CAM via Blynk Cloud REST API, Local WiFi IP, or Web Serial.'}
                 </p>
               </div>
             </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <strong className="text-emerald-400 font-semibold block mb-1">
-                  ជំហានទី ១: បញ្ចូល ESP32 Board URL ក្នុង Arduino IDE
-                </strong>
-                <p className="text-slate-400 mb-1">
-                  បើក Arduino IDE &rarr; ចូល <strong>File &gt; Preferences &gt; Additional Boards Manager URLs</strong> រួចបិទភ្ជាប់ Link នេះ៖
-                </p>
-                <code className="block bg-slate-900 p-2 rounded text-cyan-300 font-mono select-all">
-                  https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-                </code>
+
+            {/* Protocol Switcher */}
+            <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs">
+              <button
+                onClick={() => setRemoteDispatchMode('blynk_cloud')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 ${
+                  remoteDispatchMode === 'blynk_cloud'
+                    ? 'bg-emerald-500 text-slate-950 shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>Blynk Cloud API</span>
+              </button>
+              <button
+                onClick={() => setRemoteDispatchMode('local_ip')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 ${
+                  remoteDispatchMode === 'local_ip'
+                    ? 'bg-cyan-500 text-slate-950 shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Wifi className="w-3.5 h-3.5" />
+                <span>Local WiFi IP</span>
+              </button>
+              <button
+                onClick={() => setRemoteDispatchMode('web_serial')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 ${
+                  remoteDispatchMode === 'web_serial'
+                    ? 'bg-amber-500 text-slate-950 shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Usb className="w-3.5 h-3.5" />
+                <span>Web Serial (USB/OTG)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Protocol Configuration Box */}
+          {remoteDispatchMode === 'blynk_cloud' && (
+            <div className="p-3 bg-emerald-950/20 border border-emerald-500/30 rounded-xl text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-emerald-300 flex items-center gap-1.5">
+                  <Globe className="w-4 h-4" />
+                  {lang === 'km' ? 'ផ្លូវបញ្ជាឆ្លងកាត់ Blynk Cloud (ទូទាំងពិភពលោក):' : 'Blynk Cloud REST API Route (Global Internet):'}
+                </span>
+                <span className="text-emerald-400 font-mono text-[11px] font-bold">Token: {blynkAuthToken.slice(0, 8)}...</span>
+              </div>
+              <p className="text-slate-300 text-[11px]">
+                {lang === 'km'
+                  ? 'រាល់ពេលអ្នកចុចប៊ូតុងខាងក្រោម ប្រព័ន្ធនឹងផ្ញើសំណើ HTTP ទៅកាន់ Blynk Cloud Server ហើយ Chip ESP32 របស់អ្នកនឹងទទួលបញ្ជា BLYNK_WRITE(V0) ភ្លាមៗ!'
+                  : 'Every switch action issues an authenticated HTTP PUT/GET to Blynk Cloud, triggering the real physical pin on your ESP32 in under 150ms.'}
+              </p>
+            </div>
+          )}
+
+          {remoteDispatchMode === 'local_ip' && (
+            <div className="p-3.5 bg-cyan-950/20 border border-cyan-500/30 rounded-xl text-xs space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span className="font-bold text-cyan-300 flex items-center gap-1.5">
+                  <Wifi className="w-4 h-4" />
+                  {lang === 'km' ? 'អាសយដ្ឋាន Local IP របស់ ESP32 ក្នុងបណ្តាញ Wi-Fi:' : 'ESP32 Local Network IP Address:'}
+                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={chipTargetIp}
+                    onChange={(e) => setChipTargetIp(e.target.value)}
+                    placeholder="192.168.1.100"
+                    className="bg-slate-950 border border-cyan-500/40 px-3 py-1.5 rounded-lg text-cyan-300 font-mono font-bold text-xs focus:outline-none"
+                  />
+                  <span className="text-[11px] text-slate-400 font-mono">:80</span>
+                </div>
+              </div>
+              <p className="text-slate-300 text-[11px]">
+                {lang === 'km'
+                  ? 'បញ្ជាផ្ទាល់ក្នុងបណ្តាញ Wi-Fi ក្នុងផ្ទះ (Sub-10ms Latency) ដោយមិនចាំបាច់ឆ្លងកាត់ Cloud Server'
+                  : 'Direct local webhook execution (sub-10ms latency) without requiring internet or third-party servers.'}
+              </p>
+            </div>
+          )}
+
+          {remoteDispatchMode === 'web_serial' && (
+            <div className="p-3.5 bg-amber-950/20 border border-amber-500/30 rounded-xl text-xs space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                  <Usb className="w-4 h-4" />
+                  {lang === 'km' ? 'ភ្ជាប់ខ្សែ USB / OTG ផ្ទាល់ទៅកាន់ ESP32 (115200 Baud):' : 'Direct USB / OTG Web Serial Connection (115200 Baud):'}
+                </span>
+                <div>
+                  {!serialConnected ? (
+                    <button
+                      onClick={handleConnectWebSerial}
+                      className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg transition text-xs flex items-center gap-1.5"
+                    >
+                      <Usb className="w-3.5 h-3.5" />
+                      <span>{lang === 'km' ? 'ជ្រើសរើស COM Port' : 'Connect COM Port'}</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleDisconnectWebSerial}
+                      className="px-3.5 py-1.5 bg-rose-500 hover:bg-rose-400 text-white font-bold rounded-lg transition text-xs"
+                    >
+                      <span>{lang === 'km' ? 'ផ្តាច់ការតភ្ជាប់' : 'Disconnect'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <strong className="text-emerald-400 font-semibold block mb-1">
-                  ជំហានទី ២: ដំឡើង Libraries ដែលត្រូវការ
-                </strong>
-                <p className="text-slate-400 mb-1">
-                  ចូល <strong>Sketch &gt; Include Library &gt; Manage Libraries...</strong> រួចស្វែងរក និង Install ៖
-                </p>
-                <ul className="list-disc list-inside space-y-1 text-slate-300 ml-2">
-                  <li><strong className="text-white">DHT sensor library</strong> ដោយ <em>Adafruit</em></li>
-                  <li><strong className="text-white">Adafruit Unified Sensor</strong> ដោយ <em>Adafruit</em></li>
-                  <li>(ចំណាំ៖ <code>WiFi.h</code> និង <code>HTTPClient.h</code> មានស្រាប់ក្នុង ESP32 core មិនបាច់ install ទេ)</li>
-                </ul>
+              {/* Real-time Serial Monitor */}
+              <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 font-mono text-[11px] text-emerald-400 h-28 overflow-y-auto space-y-0.5">
+                {serialLogs.length === 0 ? (
+                  <span className="text-slate-600">{lang === 'km' ? 'រង់ចាំទិន្នន័យពី Serial Port...' : 'Waiting for serial data...'}</span>
+                ) : (
+                  serialLogs.map((log, idx) => <div key={idx}>{log}</div>)
+                )}
               </div>
 
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <strong className="text-emerald-400 font-semibold block mb-1">
-                  ជំហានទី ៣: ជ្រើសរើស Board & Port រួចចុច Upload
-                </strong>
-                <ul className="list-disc list-inside space-y-1 text-slate-300 ml-2">
-                  <li>Board: <strong>ESP32 Dev Module</strong> ឬ <strong>DOIT ESP32 DEVKIT V1</strong></li>
-                  <li>Upload Speed: <strong>921600</strong> ឬ <strong>115200</strong></li>
-                  <li>Flash Frequency: <strong>80MHz</strong></li>
-                  <li>ចុចប៊ូតុង <strong>Upload</strong> (ប្រសិន ESP32 គាំងត្រង់ <em>Connecting...</em> សូមចុចសង្កត់ប៊ូតុង <strong>BOOT</strong> លើ Board ប្រហែល ២វិនាទី)</li>
-                </ul>
-              </div>
+              {/* Custom Command Sender */}
+              {serialConnected && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={serialInput}
+                    onChange={(e) => setSerialInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && sendCustomSerialCommand()}
+                    placeholder="e.g. V0=1, V0=0, STATUS, RESTART"
+                    className="flex-1 bg-slate-950 border border-slate-700 px-3 py-1.5 rounded-lg text-white font-mono text-xs focus:outline-none"
+                  />
+                  <button
+                    onClick={sendCustomSerialCommand}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-xs"
+                  >
+                    Send
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <strong className="text-emerald-400 font-semibold block mb-1">
-                  ជំហានទី ៤: បើក Serial Monitor ដើម្បីពិនិត្យ
-                </strong>
-                <p className="text-slate-400">
-                  បើក <strong>Serial Monitor</strong> កំណត់ Baud rate ទៅ <strong>115200 baud</strong>។ អ្នកនឹងឃើញ ESP32 ភ្ជាប់ Wi-Fi និងចាប់ផ្ដើម Sync ទិន្នន័យជាមួយ Dashboard ភ្លាមៗ!
+          {/* INTERACTIVE PHYSICAL CHIP COMMAND CARDS */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 1. SMART LAMP TOGGLE (V0 / GPIO 12) */}
+            <div className={`p-4 rounded-2xl border-2 transition-all flex flex-col justify-between ${
+              remoteLampState === 1
+                ? 'bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-950 border-amber-500/60 shadow-xl shadow-amber-500/10'
+                : 'bg-slate-950/70 border-slate-800'
+            }`}>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                    <Lightbulb className="w-5 h-5" />
+                  </div>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
+                    remoteLampState === 1 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-slate-800 text-slate-400'
+                  }`}>
+                    {remoteLampState === 1 ? 'ON (បើក)' : 'OFF (បិទ)'}
+                  </span>
+                </div>
+                <h4 className="font-bold text-white text-sm">Smart_Lamp</h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">GPIO {lampPin} (Pin 12 / Virtual Pin V0)</p>
+                <p className="text-[10px] text-sky-400 mt-1">
+                  {lang === 'km' ? '📢 ផ្ញើសារ Telegram ស្វ័យប្រវត្តិពេលប្តូរ' : '📢 Triggers Telegram notify automatically'}
                 </p>
               </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-800/80">
+                <button
+                  disabled={remoteDispatching}
+                  onClick={() => dispatchChipCommand('V0', remoteLampState === 1 ? 0 : 1)}
+                  className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition ${
+                    remoteLampState === 1
+                      ? 'bg-rose-500 hover:bg-rose-400 text-white shadow-lg shadow-rose-500/20'
+                      : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/20'
+                  }`}
+                >
+                  <Power className="w-4 h-4" />
+                  <span>{remoteLampState === 1 ? (lang === 'km' ? 'ចុចដើម្បីបិទអំពូល' : 'Turn OFF Lamp') : (lang === 'km' ? 'ចុចដើម្បីបើកអំពូល' : 'Turn ON Lamp')}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 2. ESP32-CAM FLASH LED (GPIO 4) */}
+            <div className={`p-4 rounded-2xl border-2 transition-all flex flex-col justify-between ${
+              remoteFlashState === 1
+                ? 'bg-gradient-to-br from-yellow-950/40 via-slate-900 to-slate-950 border-yellow-500/60 shadow-xl shadow-yellow-500/10'
+                : 'bg-slate-950/70 border-slate-800'
+            }`}>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-10 h-10 rounded-xl bg-yellow-500/20 text-yellow-400 flex items-center justify-center">
+                    <Zap className="w-5 h-5" />
+                  </div>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
+                    remoteFlashState === 1 ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/40' : 'bg-slate-800 text-slate-400'
+                  }`}>
+                    {remoteFlashState === 1 ? 'FLASH ON' : 'STANDBY'}
+                  </span>
+                </div>
+                <h4 className="font-bold text-white text-sm">ESP32-CAM Flash</h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">High-Power LED on GPIO 4</p>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {lang === 'km' ? 'អំពូល Flash សម្រាប់ថតរូបពេលយប់' : 'High brightness illumination'}
+                </p>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-800/80">
+                <button
+                  disabled={remoteDispatching}
+                  onClick={() => dispatchChipCommand('V4', remoteFlashState === 1 ? 0 : 1)}
+                  className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition ${
+                    remoteFlashState === 1
+                      ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                      : 'bg-yellow-500 hover:bg-yellow-400 text-slate-950 shadow-lg shadow-yellow-500/20'
+                  }`}
+                >
+                  <Zap className="w-4 h-4" />
+                  <span>{remoteFlashState === 1 ? 'Turn OFF Flash' : 'Turn ON Flash'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 3. MQ-135 SENSOR HAZARD TEST (Pin 14 / V1) */}
+            <div className={`p-4 rounded-2xl border-2 transition-all flex flex-col justify-between ${
+              remoteGasSimState === 1
+                ? 'bg-gradient-to-br from-rose-950/40 via-slate-900 to-slate-950 border-rose-500/60 shadow-xl shadow-rose-500/10'
+                : 'bg-slate-950/70 border-slate-800'
+            }`}>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center">
+                    <Flame className="w-5 h-5" />
+                  </div>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
+                    remoteGasSimState === 1 ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                  }`}>
+                    {remoteGasSimState === 1 ? 'ALERT (HIGH)' : 'SAFE (NORMAL)'}
+                  </span>
+                </div>
+                <h4 className="font-bold text-white text-sm">MQ-135 Gas Alert</h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">GPIO {mq135Pin} Digital Out (V1)</p>
+                <p className="text-[10px] text-rose-400 mt-1">
+                  {lang === 'km' ? 'សាកល្បងប្រកាសអាសន្នផ្សែង' : 'Test gas hazard safety alarms'}
+                </p>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-800/80">
+                <button
+                  disabled={remoteDispatching}
+                  onClick={() => dispatchChipCommand('V1', remoteGasSimState === 1 ? 0 : 1)}
+                  className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition ${
+                    remoteGasSimState === 1
+                      ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                      : 'bg-rose-500 hover:bg-rose-400 text-white shadow-lg shadow-rose-500/20'
+                  }`}
+                >
+                  <Flame className="w-4 h-4" />
+                  <span>{remoteGasSimState === 1 ? (lang === 'km' ? 'កំណត់ជាធម្មតា (Safe)' : 'Set Normal') : (lang === 'km' ? 'តេស្តអាសន្នផ្សែង (Hazard)' : 'Trigger Gas Alert')}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 4. CHIP SOFTWARE REBOOT (OTA Reset) */}
+            <div className="p-4 rounded-2xl border-2 border-slate-800 bg-slate-950/70 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center">
+                    <RefreshCw className="w-5 h-5" />
+                  </div>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-slate-800 text-slate-400">
+                    ESP.restart()
+                  </span>
+                </div>
+                <h4 className="font-bold text-white text-sm">ESP32 Reboot</h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">Software Restart Command</p>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {lang === 'km' ? 'បញ្ជាឱ្យ Microcontroller ចាប់ផ្តើមឡើងវិញ' : 'Send remote reset packet'}
+                </p>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-800/80">
+                <button
+                  disabled={remoteDispatching}
+                  onClick={() => dispatchChipCommand('REBOOT', 1)}
+                  className="w-full py-2.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center justify-center gap-2 transition"
+                >
+                  <RefreshCw className="w-4 h-4 text-cyan-400" />
+                  <span>{lang === 'km' ? 'Reboot ESP32' : 'Reboot ESP32'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Status Message Display */}
+          {remoteStatusMessage && (
+            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs font-mono text-emerald-400 flex items-center justify-between">
+              <span>{remoteStatusMessage}</span>
+              <span className="text-[10px] text-slate-500">{new Date().toLocaleTimeString()}</span>
             </div>
           )}
         </div>
       )}
 
-      {/* SUB TAB 3: WIRING SCHEMATIC & PINOUT */}
-      {activeSubTab === 'wiring' && (
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Layers className="w-4 h-4 text-emerald-400" />
-            {boardType === 'esp32_cam'
-              ? (lang === 'km' ? 'តារាងតខ្សែ ESP32-CAM Pinout & Flash / Motion' : 'ESP32-CAM Hardware Wiring Schematic')
-              : (lang === 'km' ? 'តារាងតខ្សែ Sensor & Relay ជាមួយ ESP32' : 'ESP32 Hardware Wiring Schematic')}
-          </h3>
+      {/* SUB TAB 3: TELEGRAM BOT NOTIFICATION CONFIGURATION */}
+      {activeSubTab === 'telegram' && (
+        <div className="bg-gradient-to-br from-sky-950/40 via-slate-900 to-slate-950 border border-sky-500/40 rounded-2xl p-5 shadow-2xl space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-sky-500/20">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center">
+                <Bot className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <span>{lang === 'km' ? 'ការកំណត់ Telegram Bot សម្រាប់ផ្ញើសារដំណឹង' : 'Telegram Bot Alert Integration'}</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-950 text-sky-400 border border-sky-700">
+                    REAL-TIME ALERTS
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {lang === 'km'
+                    ? 'ផ្ញើសារស្វ័យប្រវត្តទៅ Telegram ពេលកម្រិត MQ135 រកឃើញផ្សែងពុល ឬពេល Smart_Lamp បើក/បិទ'
+                    : 'Instant Telegram alerts when MQ-135 detects hazard or when Smart_Lamp toggles.'}
+                </p>
+              </div>
+            </div>
 
-          <div className="overflow-x-auto">
-            {boardType === 'esp32_cam' ? (
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-800 text-slate-400 uppercase text-[10px]">
-                    <th className="py-2.5 px-3">Function / Peripheral</th>
-                    <th className="py-2.5 px-3">ESP32-CAM Pin</th>
-                    <th className="py-2.5 px-3">Virtual Pin</th>
-                    <th className="py-2.5 px-3">Direction</th>
-                    <th className="py-2.5 px-3">Description / Notes</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60 font-mono text-slate-300">
-                  <tr>
-                    <td className="py-2.5 px-3 font-sans font-bold text-cyan-400">OV2640 Camera Sensor</td>
-                    <td className="py-2.5 px-3 text-white">GPIO 0, 5, 18-27, 34-39</td>
-                    <td className="py-2.5 px-3 text-cyan-400">HTTP /stream</td>
-                    <td className="py-2.5 px-3 text-yellow-400">Internal FPC</td>
-                    <td className="py-2.5 px-3 font-sans text-slate-400">2-Megapixel Camera socket on board</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-sans font-bold text-amber-400">High-Power White Flash LED</td>
-                    <td className="py-2.5 px-3 text-white">GPIO 4</td>
-                    <td className="py-2.5 px-3 text-emerald-400">V0 / V3</td>
-                    <td className="py-2.5 px-3 text-green-400">OUTPUT</td>
-                    <td className="py-2.5 px-3 font-sans text-slate-400">Onboard high brightness LED for night vision</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-sans font-bold text-purple-400">PIR Motion Detector (HC-SR501)</td>
-                    <td className="py-2.5 px-3 text-white">GPIO 13 / 12</td>
-                    <td className="py-2.5 px-3 text-emerald-400">V6 (Alert)</td>
-                    <td className="py-2.5 px-3 text-cyan-400">INPUT</td>
-                    <td className="py-2.5 px-3 font-sans text-slate-400">Triggers motion alerts to Blynk Cloud console</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-sans font-bold text-red-400">Onboard Status Indicator LED</td>
-                    <td className="py-2.5 px-3 text-white">GPIO 33</td>
-                    <td className="py-2.5 px-3 text-slate-400">Internal</td>
-                    <td className="py-2.5 px-3 text-green-400">OUTPUT</td>
-                    <td className="py-2.5 px-3 font-sans text-slate-400">Active LOW small red indicator on the back</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-sans font-bold text-emerald-400">Power Supply (VCC)</td>
-                    <td className="py-2.5 px-3 text-white">5V Pin</td>
-                    <td className="py-2.5 px-3 text-slate-400">Power</td>
-                    <td className="py-2.5 px-3 text-yellow-400">5V DC &ge; 2A</td>
-                    <td className="py-2.5 px-3 font-sans text-slate-400">Requires stable 5V &ge; 2A power supply for Wi-Fi + Camera</td>
-                  </tr>
-                </tbody>
-              </table>
-            ) : (
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-800 text-slate-400 uppercase text-[10px]">
-                    <th className="py-2.5 px-3">Module / Sensor</th>
-                    <th className="py-2.5 px-3">ESP32 Pin</th>
-                    <th className="py-2.5 px-3">Virtual Pin</th>
-                    <th className="py-2.5 px-3">VCC / Power</th>
-                    <th className="py-2.5 px-3">GND</th>
-                    <th className="py-2.5 px-3">Wiring Notes</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60 font-mono text-slate-300">
-                  <tr>
-                    <td className="py-2.5 px-3 font-sans font-bold text-orange-400">DHT22 / DHT11</td>
-                    <td className="py-2.5 px-3 text-white">GPIO 4</td>
-                    <td className="py-2.5 px-3 text-emerald-400">V0 / V1</td>
-                    <td className="py-2.5 px-3 text-yellow-400">3.3V / 5V</td>
-                    <td className="py-2.5 px-3">GND</td>
-                    <td className="py-2.5 px-3 font-sans text-slate-400">Pull-up 10k resistor between Data & VCC</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-sans font-bold text-emerald-400">Relay Module 1 (Pump)</td>
-                    <td className="py-2.5 px-3 text-white">GPIO 23</td>
-                    <td className="py-2.5 px-3 text-emerald-400">V2</td>
-                    <td className="py-2.5 px-3 text-yellow-400">5V (VIN)</td>
-                    <td className="py-2.5 px-3">GND</td>
-                    <td className="py-2.5 px-3 font-sans text-slate-400">Optocoupler isolated relay channel 1</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-sans font-bold text-amber-400">Relay Module 2 (Lamp)</td>
-                    <td className="py-2.5 px-3 text-white">GPIO 22</td>
-                    <td className="py-2.5 px-3 text-emerald-400">V3</td>
-                    <td className="py-2.5 px-3 text-yellow-400">5V (VIN)</td>
-                    <td className="py-2.5 px-3">GND</td>
-                    <td className="py-2.5 px-3 font-sans text-slate-400">Optocoupler isolated relay channel 2</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-sans font-bold text-blue-400">Fan PWM / MOSFET</td>
-                    <td className="py-2.5 px-3 text-white">GPIO 19</td>
-                    <td className="py-2.5 px-3 text-emerald-400">V4</td>
-                    <td className="py-2.5 px-3 text-yellow-400">12V / 5V</td>
-                    <td className="py-2.5 px-3">GND</td>
-                    <td className="py-2.5 px-3 font-sans text-slate-400">Gate pin of N-Channel MOSFET / Motor Driver</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-sans font-bold text-purple-400">MQ-135 Gas / Smoke</td>
-                    <td className="py-2.5 px-3 text-white">GPIO 34 (ADC)</td>
-                    <td className="py-2.5 px-3 text-emerald-400">V5</td>
-                    <td className="py-2.5 px-3 text-yellow-400">5V (VIN)</td>
-                    <td className="py-2.5 px-3">GND</td>
-                    <td className="py-2.5 px-3 font-sans text-slate-400">Analog Out (AOUT) pin to ADC1</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-sans font-bold text-teal-400">Soil Moisture Probe</td>
-                    <td className="py-2.5 px-3 text-white">GPIO 35 (ADC)</td>
-                    <td className="py-2.5 px-3 text-emerald-400">V7</td>
-                    <td className="py-2.5 px-3 text-yellow-400">3.3V</td>
-                    <td className="py-2.5 px-3">GND</td>
-                    <td className="py-2.5 px-3 font-sans text-slate-400">Capacitive corrosion-free probe</td>
-                  </tr>
-                </tbody>
-              </table>
-            )}
+            <button
+              onClick={sendTestTelegram}
+              disabled={telegramTesting}
+              className="flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-400 disabled:opacity-50 text-slate-950 rounded-xl text-xs font-bold transition shadow-lg shadow-sky-500/20 self-start sm:self-auto"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>
+                {telegramTesting
+                  ? (lang === 'km' ? 'កំពុងផ្ញើសារ...' : 'Sending...')
+                  : (lang === 'km' ? 'តេស្តផ្ញើសារ Telegram' : 'Test Telegram Message')}
+              </span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                TELEGRAM BOT TOKEN
+              </label>
+              <input
+                type="text"
+                value={telegramBotToken}
+                onChange={(e) => setTelegramBotToken(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 focus:border-sky-500 rounded-xl px-3 py-2 text-sky-400 font-mono text-xs font-bold focus:outline-none"
+                placeholder="e.g. 8928313450:AAEvmTZMGGDXRJZ-W1ZuE2vc5AlVSQ5oDbY"
+              />
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                TELEGRAM CHAT ID
+              </label>
+              <input
+                type="text"
+                value={telegramChatId}
+                onChange={(e) => setTelegramChatId(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 focus:border-sky-500 rounded-xl px-3 py-2 text-white font-mono text-xs font-bold focus:outline-none"
+                placeholder="e.g. 5780071626"
+              />
+            </div>
+          </div>
+
+          {telegramStatus && (
+            <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+              telegramStatus === 'success'
+                ? 'bg-emerald-950/60 border border-emerald-500/40 text-emerald-300'
+                : 'bg-rose-950/60 border border-rose-500/40 text-rose-300'
+            }`}>
+              {telegramStatus === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <ShieldAlert className="w-4 h-4 text-rose-400" />}
+              <span>
+                {telegramStatus === 'success'
+                  ? (lang === 'km' ? 'សារ Telegram បានផ្ញើជោគជ័យទៅកាន់ Chat ID ' + telegramChatId : 'Telegram message delivered successfully to Chat ID ' + telegramChatId)
+                  : telegramStatus}
+              </span>
+            </div>
+          )}
+
+          {/* Telegram Rules & Logic Info */}
+          <div className="p-4 bg-slate-950 rounded-xl border border-sky-500/20 text-xs space-y-2">
+            <h4 className="font-bold text-sky-400 flex items-center gap-1.5">
+              <BellRing className="w-3.5 h-3.5" />
+              <span>{lang === 'km' ? 'លក្ខខណ្ឌដែលប្រព័ន្ធផ្ញើសារទៅ Telegram:' : 'Automated Telegram Alert Triggers:'}</span>
+            </h4>
+            <ul className="space-y-2 text-slate-300">
+              <li className="flex items-start gap-2">
+                <span className="text-emerald-400 font-bold mt-0.5">✓</span>
+                <span><strong>ពេលបើកអំពូល (V0 = ON):</strong> ផ្ញើសារស្វ័យប្រវត្ត <code>💡 អំពូលកំពុងបើក</code> ទៅកាន់ Telegram ភ្លាមៗ។</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-amber-400 font-bold mt-0.5">✓</span>
+                <span><strong>ពេលបិទអំពូល (V0 = OFF):</strong> ផ្ញើសារស្វ័យប្រវត្ត <code>⭕ អំពូលត្រូវបានបិទ</code>។</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-rose-400 font-bold mt-0.5">✓</span>
+                <span><strong>ពេល MQ-135 រកឃើញផ្សែង (Pin 14 Digital DO):</strong> ផ្ញើសារប្រកាសអាសន្នផ្សែងពុល/ឧស្ម័នគ្រោះថ្នាក់។</span>
+              </li>
+            </ul>
           </div>
         </div>
       )}
 
-      {/* SUB TAB 4: REST API & CURL TEST */}
+      {/* SUB TAB 4: READ-ONLY C++ CODE VIEW */}
+      {activeSubTab === 'code' && (
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Code2 className="w-4 h-4 text-emerald-400" />
+              <span>{lang === 'km' ? 'កូដ Arduino C++ ពេញលេញ' : 'Arduino C++ Code Output'}</span>
+            </h3>
+            <button
+              onClick={copyCustomCode}
+              className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              <span>{copiedCode ? 'Copied' : 'Copy'}</span>
+            </button>
+          </div>
+          <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 overflow-x-auto text-xs font-mono text-emerald-400 leading-relaxed">
+            <pre>{customCode}</pre>
+          </div>
+        </div>
+      )}
+
+      {/* SUB TAB 5: FLASHING GUIDE */}
+      {activeSubTab === 'guide' && (
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4 text-xs">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <BookOpen className="w-4 h-4 text-emerald-400" />
+            {lang === 'km' ? 'ជំហាន Flash កូដទៅ ESP32-CAM តាម Arduino IDE' : 'Flashing Guide for ESP32-CAM via Arduino IDE'}
+          </h3>
+
+          <div className="space-y-3 text-slate-300">
+            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
+              <h4 className="font-bold text-white mb-1">១. ដំឡើង Library ចាំបាច់ (Install Required Libraries):</h4>
+              <p className="text-slate-400 mb-2">
+                បើក Arduino IDE ចូល <strong>Sketch &gt; Include Library &gt; Manage Libraries...</strong> រួចស្វែងរកដំឡើង៖
+              </p>
+              <ul className="list-disc list-inside space-y-1 font-mono text-emerald-400">
+                <li>Blynk by Volodymyr Shymanskyy (v1.3.x+)</li>
+                <li>UrlEncode by Masayuki Sugahara (ដើម្បីផ្ញើសារអក្សរខ្មែរទៅ Telegram)</li>
+              </ul>
+            </div>
+
+            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
+              <h4 className="font-bold text-white mb-1">២. ជ្រើសរើស Board & Port សម្រាប់ ESP32-CAM:</h4>
+              <p className="text-slate-400 mb-2">ចូល <strong>Tools &gt; Board &gt; ESP32 Arduino</strong> រួចជ្រើសរើស៖</p>
+              <ul className="list-disc list-inside space-y-1 font-mono text-cyan-300">
+                <li>Board: "AI Thinker ESP32-CAM"</li>
+                <li>Upload Speed: "115200"</li>
+                <li>Flash Frequency: "40MHz"</li>
+                <li>Flash Mode: "QIO"</li>
+              </ul>
+            </div>
+
+            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
+              <h4 className="font-bold text-amber-400 mb-1">⚠️ ចំណាំសំខាន់ពេល Flash ESP32-CAM:</h4>
+              <p className="text-slate-300">
+                ត្រូវតខ្សែ <strong>GPIO 0 ទៅកាន់ GND</strong> មុនពេលចុចប៊ូតុង Upload។ បន្ទាប់ពី Upload ពេញ ១០០% សូមដកខ្សែ GPIO 0 ចេញពី GND រួចចុចប៊ូតុង <strong>RST / Reset</strong> នៅលើ ESP32-CAM។
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUB TAB 6: HARDWARE WIRING */}
+      {activeSubTab === 'wiring' && (
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4 text-xs">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <Layers className="w-4 h-4 text-emerald-400" />
+            {lang === 'km' ? 'តារាងតខ្សែ GPIO សម្រាប់ ESP32-CAM & ESP32' : 'Hardware Pinout & Wiring Connections'}
+          </h3>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+                <tr>
+                  <th className="py-2.5 px-3">Device / Sensor</th>
+                  <th className="py-2.5 px-3">ESP32 Pin</th>
+                  <th className="py-2.5 px-3">Blynk Pin</th>
+                  <th className="py-2.5 px-3">VCC</th>
+                  <th className="py-2.5 px-3">GND</th>
+                  <th className="py-2.5 px-3">Wiring Notes</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 font-mono text-slate-300">
+                <tr>
+                  <td className="py-2.5 px-3 font-sans font-bold text-amber-400">Smart_Lamp (Relay / LED)</td>
+                  <td className="py-2.5 px-3 text-white font-bold">GPIO {lampPin} (Pin 12)</td>
+                  <td className="py-2.5 px-3 text-emerald-400 font-bold">V0</td>
+                  <td className="py-2.5 px-3 text-yellow-400">3.3V / 5V</td>
+                  <td className="py-2.5 px-3">GND</td>
+                  <td className="py-2.5 px-3 font-sans text-slate-400">Relay IN or LED anode via 220Ω resistor</td>
+                </tr>
+                <tr>
+                  <td className="py-2.5 px-3 font-sans font-bold text-emerald-400">MQ-135 Gas / Air Quality</td>
+                  <td className="py-2.5 px-3 text-white font-bold">GPIO {mq135Pin} (Pin 14 DO)</td>
+                  <td className="py-2.5 px-3 text-emerald-400 font-bold">V1</td>
+                  <td className="py-2.5 px-3 text-yellow-400">5V (VIN)</td>
+                  <td className="py-2.5 px-3">GND</td>
+                  <td className="py-2.5 px-3 font-sans text-slate-400">Digital Out (DO) to Pin 14 with INPUT_PULLUP</td>
+                </tr>
+                <tr>
+                  <td className="py-2.5 px-3 font-sans font-bold text-yellow-400">Built-in Flash LED</td>
+                  <td className="py-2.5 px-3 text-white font-bold">GPIO 4</td>
+                  <td className="py-2.5 px-3 text-emerald-400 font-bold">V4</td>
+                  <td className="py-2.5 px-3 text-yellow-400">Internal</td>
+                  <td className="py-2.5 px-3">Internal</td>
+                  <td className="py-2.5 px-3 font-sans text-slate-400">Onboard high brightness LED on ESP32-CAM</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* SUB TAB 7: REST API & CURL TEST */}
       {activeSubTab === 'api' && (
         <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4 text-xs">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -1070,19 +1570,10 @@ void syncCloud(int motion) {
 
             <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
               <div className="mb-1.5">
-                <span className="font-semibold text-emerald-400">2. Read Relay 1 Value (Plain scalar 1 or 0):</span>
+                <span className="font-semibold text-emerald-400">2. Direct Chip Command Endpoint:</span>
               </div>
               <code className="block bg-slate-900 p-2 rounded text-cyan-300 font-mono select-all overflow-x-auto">
-                curl -X GET "{serverUrl}/api/iot/get?token={token}&pin=v2"
-              </code>
-            </div>
-
-            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-              <div className="mb-1.5">
-                <span className="font-semibold text-emerald-400">3. Read All Pins (JSON Payload):</span>
-              </div>
-              <code className="block bg-slate-900 p-2 rounded text-cyan-300 font-mono select-all overflow-x-auto">
-                curl -X GET "{serverUrl}/api/iot/all?token={token}"
+                curl -X POST "{serverUrl}/api/iot/chip/command" -H "Content-Type: application/json" -d '{`{"pin":"V0","value":1,"blynkToken":"${blynkAuthToken}"}`}'
               </code>
             </div>
           </div>

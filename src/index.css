@@ -1,12 +1,54 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Battambang', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
 @layer base {
+  *, ::before, ::after {
+    font-family: 'Battambang', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+
   body {
-    font-family: 'Plus Jakarta Sans', 'Kantumruy Pro', system-ui, -apple-system, sans-serif;
+    font-family: 'Battambang', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    margin: 0;
+    padding: 0;
   }
-  code, pre, .font-mono {
-    font-family: 'JetBrains Mono', monospace;
+
+  code, pre, .font-mono, [class*="font-mono"] {
+    font-family: 'JetBrains Mono', monospace !important;
   }
+}
+
+/* Custom transitions and scrollbar */
+html {
+  color-scheme: light dark;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+html.light {
+  color-scheme: light;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+}
+
+.animate-pulseGlow {
+  animation: pulseGlow 2s ease-in-out infinite;
 }
 
 @keyframes fadeIn {
@@ -23,4 +65,5 @@
 .animate-fadeIn {
   animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
 
