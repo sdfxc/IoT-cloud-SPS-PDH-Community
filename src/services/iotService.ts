@@ -140,9 +140,27 @@ class IoTService {
     }
   }
 
-  // Update a pin value via REST API
+  // Update a pin value via REST API & Local IP if present
   public async updatePin(token: string, pin: VirtualPinId, value: number | string): Promise<boolean> {
     try {
+      // 1. If user entered a local IP (e.g. 192.168.0.169), dispatch direct LAN call immediately
+      const savedIp = typeof window !== 'undefined' ? (localStorage.getItem('sps_peh_chip_ip') || '192.168.0.169') : null;
+      if (savedIp) {
+        try {
+          const actionPath = Number(value) === 1 ? 'on' : 'off';
+          const targetUrl = `http://${savedIp}/${actionPath}?t=${Date.now()}`;
+          const ifr = (document.getElementById('esp_hidden_sender') as HTMLIFrameElement) || document.createElement('iframe');
+          ifr.id = 'esp_hidden_sender';
+          ifr.style.display = 'none';
+          if (!document.body.contains(ifr)) {
+            document.body.appendChild(ifr);
+          }
+          ifr.src = targetUrl;
+          fetch(`http://${savedIp}/control?pin=${pin.toLowerCase()}&val=${value}`, { mode: 'no-cors' }).catch(() => {});
+          fetch(`http://${savedIp}/api/update?${pin.toLowerCase()}=${value}`, { mode: 'no-cors' }).catch(() => {});
+        } catch (e) {}
+      }
+
       const res = await fetch(`/api/iot/update?token=${encodeURIComponent(token)}&pin=${encodeURIComponent(pin)}&value=${encodeURIComponent(value)}`);
       const json = await res.json();
       return json.success;

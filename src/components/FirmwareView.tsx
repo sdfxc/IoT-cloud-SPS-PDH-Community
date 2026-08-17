@@ -52,37 +52,80 @@ export const FirmwareView: React.FC<FirmwareViewProps> = ({ device, lang }) => {
     'esp32_cam' | 'esp32_blynk_lib' | 'esp32_standard' | 'esp8266_nodemcu' | 'esp32_c3' | 'arduino_uno_wifi'
   >('esp32_cam');
   
+  // Load saved configuration from localStorage
+  const getStored = (key: string, fallback: string) => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(key) || fallback;
+    }
+    return fallback;
+  };
+
   // Blynk Credentials
   const [blynkTemplateId, setBlynkTemplateId] = useState(
-    device?.templateId || 'TMPL_SMART_LAMP_MQ135'
+    () => getStored('sps_peh_template_id', device?.templateId || 'TMPL_SMART_LAMP_MQ135')
   );
   const [blynkTemplateName, setBlynkTemplateName] = useState(
-    device?.name || 'Smart_Lamp & MQ135'
+    () => getStored('sps_peh_template_name', device?.name || 'Smart_Lamp & MQ135')
   );
   const [blynkAuthToken, setBlynkAuthToken] = useState(
-    device?.authToken || 'YFr7r30K8HV8rRQ7x59hYojzeU0m9wYs'
+    () => getStored('sps_peh_auth_token', device?.authToken || 'YFr7r30K8HV8rRQ7x59hYojzeU0m9wYs')
   );
 
   // Telegram Credentials
-  const [telegramBotToken, setTelegramBotToken] = useState('8928313450:AAEvmTZMGGDXRJZ-W1ZuE2vc5AlVSQ5oDbY');
-  const [telegramChatId, setTelegramChatId] = useState('5780071626');
+  const [telegramBotToken, setTelegramBotToken] = useState(
+    () => getStored('sps_peh_telegram_bot_token', '8928313450:AAEvmTZMGGDXRJZ-W1ZuE2vc5AlVSQ5oDbY')
+  );
+  const [telegramChatId, setTelegramChatId] = useState(
+    () => getStored('sps_peh_telegram_chat_id', '5780071626')
+  );
   const [telegramTesting, setTelegramTesting] = useState(false);
   const [telegramStatus, setTelegramStatus] = useState<string | null>(null);
 
-  const [wifiSsid, setWifiSsid] = useState('SMART-WIFI-B339');
-  const [wifiPass, setWifiPass] = useState('5E85D60F');
+  const [wifiSsid, setWifiSsid] = useState(
+    () => getStored('sps_peh_wifi_ssid', 'SMART-WIFI-B339')
+  );
+  const [wifiPass, setWifiPass] = useState(
+    () => getStored('sps_peh_wifi_pass', '5E85D60F')
+  );
   const [serverUrl, setServerUrl] = useState(
     typeof window !== 'undefined' ? window.location.origin : 'https://your-app.run.app'
   );
   const [intervalMs, setIntervalMs] = useState(2000);
-  const [lampPin, setLampPin] = useState(12);
-  const [mq135Pin, setMq135Pin] = useState(14);
-  const [relayActiveLow, setRelayActiveLow] = useState(true); // Active LOW for Relay Module vs Active HIGH for LED
+  const [lampPin, setLampPin] = useState(
+    () => Number(getStored('sps_peh_lamp_pin', '12'))
+  );
+  const [mq135Pin, setMq135Pin] = useState(
+    () => Number(getStored('sps_peh_mq135_pin', '14'))
+  );
+  const [relayActiveLow, setRelayActiveLow] = useState(true);
 
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedDefines, setCopiedDefines] = useState(false);
   const [copiedCurl, setCopiedCurl] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<'editor' | 'remote' | 'code' | 'telegram' | 'guide' | 'wiring' | 'api'>('editor');
+  const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  // Auto-save all configuration changes into localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sps_peh_template_id', blynkTemplateId);
+      localStorage.setItem('sps_peh_template_name', blynkTemplateName);
+      localStorage.setItem('sps_peh_auth_token', blynkAuthToken);
+      localStorage.setItem('sps_peh_telegram_bot_token', telegramBotToken);
+      localStorage.setItem('sps_peh_telegram_chat_id', telegramChatId);
+      localStorage.setItem('sps_peh_wifi_ssid', wifiSsid);
+      localStorage.setItem('sps_peh_wifi_pass', wifiPass);
+      localStorage.setItem('sps_peh_lamp_pin', String(lampPin));
+      localStorage.setItem('sps_peh_mq135_pin', String(mq135Pin));
+    }
+  }, [blynkTemplateId, blynkTemplateName, blynkAuthToken, telegramBotToken, telegramChatId, wifiSsid, wifiPass, lampPin, mq135Pin]);
+
+  const triggerSaveNotification = (message: string) => {
+    setSaveToast(message);
+    setTimeout(() => {
+      setSaveToast(null);
+    }, 3000);
+  };
 
   // --- LIVE IN-APP CODE EDITOR STATE ---
   const [customCode, setCustomCode] = useState<string>('');
@@ -98,7 +141,12 @@ export const FirmwareView: React.FC<FirmwareViewProps> = ({ device, lang }) => {
   const [remoteGasSimState, setRemoteGasSimState] = useState<number>(
     device?.pins.V1 ? Number(device.pins.V1.value) : 0
   );
-  const [chipTargetIp, setChipTargetIp] = useState<string>(device?.ipAddress || '192.168.1.100');
+  const [chipTargetIp, setChipTargetIp] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sps_peh_chip_ip') || device?.ipAddress || '192.168.0.169';
+    }
+    return device?.ipAddress || '192.168.0.169';
+  });
   const [remoteDispatchMode, setRemoteDispatchMode] = useState<'blynk_cloud' | 'local_ip' | 'web_serial'>('blynk_cloud');
   const [remoteStatusMessage, setRemoteStatusMessage] = useState<string | null>(null);
   const [remoteDispatching, setRemoteDispatching] = useState<boolean>(false);
@@ -905,6 +953,27 @@ void loop() {
           </div>
         </div>
 
+        {/* Save Bar for Template Credentials */}
+        <div className="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-slate-800">
+          <span className="text-[11px] text-emerald-400 font-mono flex items-center gap-1">
+            <Check className="w-3.5 h-3.5" />
+            {lang === 'km' ? 'រក្សាទុកស្វ័យប្រវត្តិក្នង Browser (Auto-saved)' : 'Auto-saved in LocalStorage'}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              localStorage.setItem('sps_peh_template_id', blynkTemplateId);
+              localStorage.setItem('sps_peh_template_name', blynkTemplateName);
+              localStorage.setItem('sps_peh_auth_token', blynkAuthToken);
+              triggerSaveNotification('✅ បានរក្សាទុក Blynk Template Info ជោគជ័យ!');
+            }}
+            className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition cursor-pointer"
+          >
+            <Save className="w-3.5 h-3.5" />
+            <span>{lang === 'km' ? 'រក្សាទុកការកំណត់ (Save All)' : 'Save Configuration'}</span>
+          </button>
+        </div>
+
         {/* Live Code Preview snippet */}
         <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs text-slate-300 relative select-all overflow-x-auto">
           <pre className="text-emerald-400 font-bold">{blynkHeaderSnippet}</pre>
@@ -1227,30 +1296,52 @@ void loop() {
 
           {remoteDispatchMode === 'local_ip' && (
             <div className="p-3.5 bg-cyan-950/20 border border-cyan-500/30 rounded-xl text-xs space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <span className="font-bold text-cyan-300 flex items-center gap-1.5">
-                  <Wifi className="w-4 h-4" />
-                  {lang === 'km' ? 'អាសយដ្ឋាន Local IP របស់ ESP32 ក្នុងបណ្តាញ Wi-Fi:' : 'ESP32 Local Network IP Address:'}
-                </span>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={chipTargetIp}
-                    onChange={(e) => setChipTargetIp(e.target.value)}
-                    placeholder="192.168.1.100"
-                    className="bg-slate-950 border border-cyan-500/40 px-3 py-1.5 rounded-lg text-cyan-300 font-mono font-bold text-xs focus:outline-none"
-                  />
-                  <span className="text-[11px] text-slate-400 font-mono">:80</span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <span className="font-bold text-cyan-300 flex items-center gap-1.5">
+                    <Wifi className="w-4 h-4" />
+                    {lang === 'km' ? 'អាសយដ្ឋាន Local IP របស់ ESP32 ក្នុងបណ្តាញ Wi-Fi:' : 'ESP32 Local Network IP Address:'}
+                  </span>
+                  <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                    <Check className="w-3 h-3" />
+                    {lang === 'km' ? 'រក្សាទុកស្វ័យប្រវត្តិ (Auto-saved into Storage)' : 'Auto-saved in LocalStorage'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={chipTargetIp}
+                      onChange={(e) => {
+                        setChipTargetIp(e.target.value);
+                        localStorage.setItem('sps_peh_chip_ip', e.target.value);
+                      }}
+                      placeholder="192.168.0.169"
+                      className="bg-slate-950 border border-cyan-500/40 px-3 py-1.5 rounded-lg text-cyan-300 font-mono font-bold text-xs focus:outline-none focus:border-cyan-400 shadow-inner"
+                    />
+                    <span className="text-[11px] text-slate-400 font-mono">:80</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      localStorage.setItem('sps_peh_chip_ip', chipTargetIp);
+                      triggerSaveNotification(`✅ បានរក្សាទុក IP: ${chipTargetIp} ជោគជ័យ!`);
+                    }}
+                    className="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-md shadow-cyan-500/20 transition cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{lang === 'km' ? 'រក្សាទុក IP (Save)' : 'Save IP'}</span>
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-cyan-500/20">
+              <div className="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-cyan-500/20">
                 <p className="text-slate-300 text-[11px]">
                   {lang === 'km'
                     ? 'បញ្ជាផ្ទាល់ក្នុងបណ្តាញ Wi-Fi ក្នុងផ្ទះ (Sub-10ms Latency) ដោយមិនចាំបាច់ឆ្លងកាត់ Cloud Server'
                     : 'Direct local webhook execution (sub-10ms latency) without requiring internet or third-party servers.'}
                 </p>
                 {chipTargetIp && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <button
                       type="button"
                       onClick={() => {
@@ -1561,7 +1652,10 @@ void loop() {
               <input
                 type="text"
                 value={telegramBotToken}
-                onChange={(e) => setTelegramBotToken(e.target.value)}
+                onChange={(e) => {
+                  setTelegramBotToken(e.target.value);
+                  localStorage.setItem('sps_peh_telegram_bot_token', e.target.value);
+                }}
                 className="w-full bg-slate-950 border border-slate-700 focus:border-sky-500 rounded-xl px-3 py-2 text-sky-400 font-mono text-xs font-bold focus:outline-none"
                 placeholder="e.g. 8928313450:AAEvmTZMGGDXRJZ-W1ZuE2vc5AlVSQ5oDbY"
               />
@@ -1574,11 +1668,33 @@ void loop() {
               <input
                 type="text"
                 value={telegramChatId}
-                onChange={(e) => setTelegramChatId(e.target.value)}
+                onChange={(e) => {
+                  setTelegramChatId(e.target.value);
+                  localStorage.setItem('sps_peh_telegram_chat_id', e.target.value);
+                }}
                 className="w-full bg-slate-950 border border-slate-700 focus:border-sky-500 rounded-xl px-3 py-2 text-white font-mono text-xs font-bold focus:outline-none"
                 placeholder="e.g. 5780071626"
               />
             </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-sky-500/20">
+            <span className="text-[11px] text-emerald-400 font-mono flex items-center gap-1">
+              <Check className="w-3.5 h-3.5" />
+              {lang === 'km' ? 'រក្សាទុកស្វ័យប្រវត្តិក្នង Browser (Auto-saved)' : 'Auto-saved in LocalStorage'}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.setItem('sps_peh_telegram_bot_token', telegramBotToken);
+                localStorage.setItem('sps_peh_telegram_chat_id', telegramChatId);
+                triggerSaveNotification('✅ បានរក្សាទុកការកំណត់ Telegram ជោគជ័យ!');
+              }}
+              className="px-3.5 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-md shadow-sky-500/20 transition cursor-pointer"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{lang === 'km' ? 'រក្សាទុកការកំណត់ Telegram' : 'Save Telegram Settings'}</span>
+            </button>
           </div>
 
           {telegramStatus && (
@@ -1774,6 +1890,14 @@ void loop() {
               </code>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Floating Save Toast Notification */}
+      {saveToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-emerald-300 border border-emerald-500/50 px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-bold font-sans animate-bounce">
+          <Check className="w-4 h-4 text-emerald-400" />
+          <span>{saveToast}</span>
         </div>
       )}
     </div>

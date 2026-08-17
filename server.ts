@@ -428,6 +428,54 @@ async function startServer() {
   app.get('/api/iot/update', handleIotUpdate);
   app.post('/api/iot/update', handleIotUpdate);
 
+  // Direct Blynk-compatible endpoint: /external/api/update
+  app.get('/external/api/update', handleIotUpdate);
+  app.post('/external/api/update', handleIotUpdate);
+
+  // Direct Blynk-compatible endpoint: /external/api/get?token=xxx&v0
+  // Or /api/iot/get?token=xxx&pin=v0
+  const handleIotGet = (req: Request, res: Response) => {
+    const token = (req.query.token || req.query.auth) as string;
+    if (!token) {
+      res.status(400).send('Missing token');
+      return;
+    }
+    const device = devices.find(d => d.authToken === token || d.id === token);
+    if (!device) {
+      res.status(404).send('Device not found');
+      return;
+    }
+
+    // Mark device as online on this self-hosted server
+    device.status = 'online';
+    device.lastSeen = 'Just now';
+
+    // Find requested pin
+    const pinParam = (req.query.pin || Object.keys(req.query).find(k => k.toLowerCase().startsWith('v') && k.toLowerCase() !== 'token')) as string;
+    if (pinParam) {
+      const pinUpper = pinParam.toUpperCase() as VirtualPinId;
+      if (device.pins[pinUpper]) {
+        const val = device.pins[pinUpper].value;
+        // Return raw text format like Blynk API
+        res.setHeader('Content-Type', 'text/plain');
+        res.send(String(val));
+        return;
+      }
+    }
+
+    // Default: return all pins JSON
+    const pinsMap: Record<string, any> = {};
+    Object.keys(device.pins).forEach(k => {
+      const pk = k as VirtualPinId;
+      pinsMap[k.toLowerCase()] = device.pins[pk].value;
+    });
+    res.json(pinsMap);
+  };
+
+  app.get('/external/api/get', handleIotGet);
+  app.get('/api/iot/get', handleIotGet);
+  app.get('/api/iot/poll', handleIotGet);
+
   // POST /api/iot/chip/command -> Universal Cross-Device Remote Control to Physical Chip
   app.post('/api/iot/chip/command', async (req: Request, res: Response) => {
     const { deviceId = 'dev_smart_lamp_mq135', pin = 'V0', value = 1, blynkToken, chipIp, sendTelegram = true } = req.body;

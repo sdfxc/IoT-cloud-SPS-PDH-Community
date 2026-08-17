@@ -30,7 +30,9 @@ import {
   Camera,
   Activity,
   Flame,
-  Volume2
+  Volume2,
+  Wifi,
+  Save
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -53,6 +55,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const [copiedToken, setCopiedToken] = useState(false);
   const [isEditingLayout, setIsEditingLayout] = useState(false);
+  const [dashboardIp, setDashboardIp] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sps_peh_chip_ip') || device?.ipAddress || '192.168.0.169';
+    }
+    return device?.ipAddress || '192.168.0.169';
+  });
+  const [ipSavedToast, setIpSavedToast] = useState<string | null>(null);
+
+  const handleSaveIp = (newIp: string) => {
+    setDashboardIp(newIp);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sps_peh_chip_ip', newIp);
+    }
+    setIpSavedToast(`✅ បានរក្សាទុក IP: ${newIp} ជោគជ័យ!`);
+    setTimeout(() => {
+      setIpSavedToast(null);
+    }, 2500);
+  };
 
   // Helper to generate default widgets based on template
   const getDefaultWidgetsForDevice = (dev: IoTDevice): DashboardWidget[] => {
@@ -188,6 +208,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <Building className="w-3.5 h-3.5 text-slate-400" />
                   <span>{device.orgId}</span>
                 </span>
+
+                {/* Local IP Address & Save Pill */}
+                <div className="flex items-center gap-1.5 bg-cyan-50 dark:bg-cyan-950/40 px-2 py-0.5 rounded-xl border border-cyan-300 dark:border-cyan-500/30 text-xs">
+                  <Wifi className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                  <span className="text-[11px] font-semibold text-cyan-800 dark:text-cyan-300">ESP32 IP:</span>
+                  <input
+                    type="text"
+                    value={dashboardIp}
+                    onChange={(e) => {
+                      setDashboardIp(e.target.value);
+                      if (typeof window !== 'undefined') {
+                        localStorage.setItem('sps_peh_chip_ip', e.target.value);
+                      }
+                    }}
+                    placeholder="192.168.0.169"
+                    className="bg-white dark:bg-slate-950 border border-cyan-400/50 dark:border-cyan-500/50 px-2 py-0.5 rounded-lg text-cyan-700 dark:text-cyan-300 font-mono font-bold text-[11px] w-28 focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleSaveIp(dashboardIp)}
+                    className="px-2 py-0.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-md text-[10px] font-bold flex items-center gap-1 shadow-sm cursor-pointer transition"
+                    title="Save IP Address"
+                  >
+                    <Save className="w-3 h-3" />
+                    <span>{lang === 'km' ? 'រក្សាទុក' : 'Save'}</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -615,7 +662,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <GoldenRockerSwitch
                   id="switch-smart-lamp-golden"
                   isOn={Number(device.pins.V0?.value ?? 1) === 1}
-                  onToggle={() => onUpdatePin('V0', Number(device.pins.V0?.value ?? 1) === 1 ? 0 : 1)}
+                  onToggle={() => {
+                    const nextVal = Number(device.pins.V0?.value ?? 1) === 1 ? 0 : 1;
+                    // Instant LAN Dispatch if local IP exists
+                    const savedIp = typeof window !== 'undefined' ? (localStorage.getItem('sps_peh_chip_ip') || '192.168.0.169') : null;
+                    if (savedIp) {
+                      try {
+                        const ifr = (document.getElementById('esp_hidden_sender') as HTMLIFrameElement) || document.createElement('iframe');
+                        ifr.id = 'esp_hidden_sender';
+                        ifr.style.display = 'none';
+                        if (!document.body.contains(ifr)) document.body.appendChild(ifr);
+                        ifr.src = `http://${savedIp}/${nextVal === 1 ? 'on' : 'off'}?t=${Date.now()}`;
+                        fetch(`http://${savedIp}/control?pin=v0&val=${nextVal}`, { mode: 'no-cors' }).catch(() => {});
+                      } catch (e) {}
+                    }
+                    onUpdatePin('V0', nextVal);
+                  }}
                   lang={lang}
                   gpioPin={12}
                   virtualPin="V0"
@@ -778,6 +840,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           )}
         </>
+      )}
+
+      {/* Toast Notification when IP is saved */}
+      {ipSavedToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-emerald-300 border border-emerald-500/50 px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-bold font-sans animate-bounce">
+          <Check className="w-4 h-4 text-emerald-400" />
+          <span>{ipSavedToast}</span>
+        </div>
       )}
     </div>
   );
