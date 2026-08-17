@@ -7,6 +7,7 @@ import { TelemetryChart } from './TelemetryChart';
 import { BlynkDashboardEditor } from './BlynkDashboardEditor';
 import { SmartSwitch } from './SmartSwitch';
 import { GoldenRockerSwitch } from './GoldenRockerSwitch';
+import { C3SmartBinDualPanel } from './C3SmartBinDualPanel';
 import {
   Thermometer,
   Droplets,
@@ -32,9 +33,13 @@ import {
   Flame,
   Volume2,
   Wifi,
-  Save
+  Save,
+  Radio,
+  RefreshCw,
+  ZapOff
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { pollDeviceDirectIp } from '../services/iotService';
 
 interface DashboardViewProps {
   device: IoTDevice | null;
@@ -62,16 +67,48 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return device?.ipAddress || '192.168.0.169';
   });
   const [ipSavedToast, setIpSavedToast] = useState<string | null>(null);
+  const [isPinging, setIsPinging] = useState(false);
+  const [pingResult, setPingResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const handleSaveIp = (newIp: string) => {
     setDashboardIp(newIp);
     if (typeof window !== 'undefined') {
       localStorage.setItem('sps_peh_chip_ip', newIp);
+      if (device) {
+        localStorage.setItem(`sps_peh_chip_ip_${device.id}`, newIp);
+      }
     }
     setIpSavedToast(`✅ បានរក្សាទុក IP: ${newIp} ជោគជ័យ!`);
     setTimeout(() => {
       setIpSavedToast(null);
     }, 2500);
+  };
+
+  const handleTestPing = async () => {
+    setIsPinging(true);
+    setPingResult(null);
+    try {
+      const res = await pollDeviceDirectIp(dashboardIp);
+      if (res.online) {
+        setPingResult({
+          ok: true,
+          message: lang === 'km' ? `ភ្ជាប់ជោគជ័យ! (${res.mode || 'Dual-Mode AP+STA'})` : `Connected! (${res.mode || 'Dual-Mode'})`
+        });
+      } else {
+        setPingResult({
+          ok: false,
+          message: lang === 'km' ? 'ESP32 មិនឆ្លើយតប (សូមពិនិត្យ Wi-Fi)' : 'ESP32 unreachable (Check WiFi)'
+        });
+      }
+    } catch (e: any) {
+      setPingResult({
+        ok: false,
+        message: lang === 'km' ? 'បរាជ័យ (Timeout)' : 'Failed (Timeout)'
+      });
+    } finally {
+      setIsPinging(false);
+      setTimeout(() => setPingResult(null), 4000);
+    }
   };
 
   // Helper to generate default widgets based on template
@@ -93,6 +130,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         { id: 'w_road_a', type: 'label', title: 'Road A Car', titleKhmer: 'រថយន្តលើផ្លូវ A', pin: 'V2', value: 92, unit: 'Cars', color: '#3b82f6', widthCols: 1 },
         { id: 'w_road_b', type: 'label', title: 'Road B Car', titleKhmer: 'រថយន្តលើផ្លូវ B', pin: 'V3', value: 13, unit: 'Cars', color: '#8b5cf6', widthCols: 1 },
         { id: 'w_street', type: 'switch', title: 'Street Light', titleKhmer: 'ភ្លើងបំភ្លឺផ្លូវ', pin: 'V4', color: '#f59e0b', widthCols: 1 },
+      ];
+    }
+    if (dev.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL') {
+      return [
+        { id: 'w_bin_level', type: 'water_tank', title: 'Smart Bin Level', titleKhmer: 'កម្រិតសំរាមក្នុងធុង', pin: 'V0', min: 0, max: 100, unit: '%', color: '#10b981', widthCols: 1 },
+        { id: 'w_dist', type: 'label', title: 'Ultrasonic Distance', titleKhmer: 'ចម្ងាយ (HC-SR04)', pin: 'V1', value: 12.5, unit: 'cm', color: '#06b6d4', widthCols: 1 },
+        { id: 'w_sw1', type: 'switch', title: 'SWITCH 1 (LED 1)', titleKhmer: 'កុងតាក់ ១ (LED 1)', pin: 'V2', color: '#eab308', widthCols: 1 },
+        { id: 'w_sw2', type: 'switch', title: 'SWITCH 2 (LED 2)', titleKhmer: 'កុងតាក់ ២ (LED 2)', pin: 'V3', color: '#f59e0b', widthCols: 1 },
+        { id: 'w_tg_alert', type: 'label', title: 'Telegram Alert', titleKhmer: 'Telegram Alert', pin: 'V4', value: 0, unit: 'Status', color: '#0ea5e9', widthCols: 1 },
       ];
     }
     // Default / ESP32-CAM / Smart Farm
@@ -234,6 +280,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <Save className="w-3 h-3" />
                     <span>{lang === 'km' ? 'រក្សាទុក' : 'Save'}</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={handleTestPing}
+                    disabled={isPinging}
+                    className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-md text-[10px] font-bold flex items-center gap-1 shadow-sm cursor-pointer transition disabled:opacity-50"
+                    title="Ping & Test Direct IP"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isPinging ? 'animate-spin' : ''}`} />
+                    <span>{isPinging ? (lang === 'km' ? 'តេស្ត...' : 'Ping...') : (lang === 'km' ? 'តេស្ត IP' : 'Ping')}</span>
+                  </button>
+                  {pingResult && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${pingResult.ok ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'}`}>
+                      {pingResult.message}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -728,9 +789,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           )}
 
           {/* ========================================================================= */}
+          {/* TEMPLATE 6: ESP32-C3 SMART BIN & DUAL WALL SWITCH (SGT)                   */}
+          {/* ========================================================================= */}
+          {device.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL' && (
+            <C3SmartBinDualPanel
+              device={device}
+              lang={lang}
+              onUpdatePin={onUpdatePin}
+              dashboardIp={dashboardIp}
+            />
+          )}
+
+          {/* ========================================================================= */}
           {/* TEMPLATE 4: SMART FARM / ESP32-CAM / DEFAULT TEMPLATE                     */}
           {/* ========================================================================= */}
-          {(!device.templateId || (device.templateId !== 'TMPL_ALERT_SYSTEM' && device.templateId !== 'TMPL_TRAFFIC_PARKING' && device.templateId !== 'TMPL_SMART_BIN' && device.templateId !== 'TMPL_SMART_LAMP_MQ135')) && (
+          {(!device.templateId || (
+            device.templateId !== 'TMPL_ALERT_SYSTEM' &&
+            device.templateId !== 'TMPL_TRAFFIC_PARKING' &&
+            device.templateId !== 'TMPL_SMART_BIN' &&
+            device.templateId !== 'TMPL_SMART_LAMP_MQ135' &&
+            device.templateId !== 'TMPL_ESP32C3_SMART_BIN_DUAL'
+          )) && (
             <div className="space-y-4">
               {/* Top Gauges & Telemetry Stats */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -203,6 +203,43 @@ setInterval(() => {
       }
     }
 
+    // 6. ESP32-C3 Smart Bin & Dual Switch simulation
+    if (dev.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL') {
+      if (dev.pins.V1) {
+        let dist = Number(dev.pins.V1.value);
+        dist += (Math.random() - 0.5) * 0.4;
+        dist = Number(Math.max(4.8, Math.min(20.5, dist)).toFixed(1));
+        dev.pins.V1.value = dist;
+
+        // Calculate fill level: 20cm=0%, 5cm=100%
+        let pct = 0;
+        if (dist >= 20.0) pct = 0;
+        else if (dist <= 5.0) pct = 100;
+        else pct = Math.round(((20.0 - dist) / 15.0) * 100);
+
+        if (dev.pins.V0) {
+          dev.pins.V0.value = pct;
+        }
+
+        if (pct >= 100 && dev.pins.V4 && Number(dev.pins.V4.value) === 0) {
+          dev.pins.V4.value = 1;
+          const logMsg: DeviceLog = {
+            id: `tg_${Date.now()}`,
+            timestamp: new Date().toLocaleTimeString(),
+            level: 'WARN',
+            deviceId: dev.id,
+            message: '[TELEGRAM ALERT] សូមមកប្រមូលសម្រាមជាបន្ទាន់ សម្រាមពេញហើយ!!! (100% Full)',
+            messageKhmer: 'ផ្ញើសារ Telegram: សូមមកប្រមូលសម្រាមជាបន្ទាន់ សម្រាមពេញហើយ!!! (កម្រិត ១០០%)',
+            source: 'TELEGRAM_BOT'
+          };
+          logs.unshift(logMsg);
+          broadcastSSE('log_added', logMsg);
+        } else if (pct < 80 && dev.pins.V4) {
+          dev.pins.V4.value = 0;
+        }
+      }
+    }
+
     evaluateAutomations(dev);
   });
 
@@ -571,6 +608,39 @@ async function startServer() {
     });
   });
 
+  // GET /api/iot/chip/poll-ip?ip=192.168.0.169 -> Read live telemetry & status from physical ESP32
+  app.get('/api/iot/chip/poll-ip', async (req: Request, res: Response) => {
+    const ip = (req.query.ip as string) || '192.168.0.169';
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const espRes = await fetch(`http://${ip}/status`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (espRes.ok) {
+        const data = await espRes.json();
+        res.json({ success: true, data, ip });
+        return;
+      }
+      res.json({ success: false, error: `HTTP ${espRes.status}`, ip });
+    } catch (err: any) {
+      res.json({ success: false, error: err?.message || 'Host unreachable', ip });
+    }
+  });
+
+  // POST /api/iot/device/update-ip -> Update IP address of any device
+  app.post('/api/iot/device/update-ip', (req: Request, res: Response) => {
+    const { deviceId, ipAddress } = req.body;
+    const dev = devices.find(d => d.id === deviceId);
+    if (!dev) {
+      res.status(404).json({ success: false, error: 'Device not found' });
+      return;
+    }
+    dev.ipAddress = ipAddress || '192.168.0.169';
+    dev.lastUpdated = 'Just now';
+    broadcastSSE('device_update', { deviceId: dev.id, device: dev });
+    res.json({ success: true, device: dev });
+  });
+
   // GET /api/iot/get?token=xxx&pin=v2 -> Microcontroller reads a single pin (e.g. Relay ON/OFF status)
   app.get('/api/iot/get', (req: Request, res: Response) => {
     const token = (req.query.token || req.query.auth) as string;
@@ -624,6 +694,54 @@ async function startServer() {
       pins: pinValues,
       timestamp: Date.now()
     });
+  });
+
+  // Direct ESP32-C3 Smart Bin & Dual Switch Endpoints (Exact Match to User Code)
+  app.get('/data', (_req: Request, res: Response) => {
+    const c3Dev = devices.find(d => d.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL') || devices[0];
+    const dist = Number(c3Dev?.pins.V1?.value || 12.5);
+    const level = Number(c3Dev?.pins.V0?.value || 45);
+    res.json({ distance: dist, level: Math.round(level) });
+  });
+
+  app.get('/led1/on', (_req: Request, res: Response) => {
+    const c3Dev = devices.find(d => d.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL');
+    if (c3Dev && c3Dev.pins.V2) {
+      c3Dev.pins.V2.value = 1;
+      broadcastSSE('device_update', { deviceId: c3Dev.id, device: c3Dev });
+    }
+    res.setHeader('Content-Type', 'text/plain');
+    res.send('1');
+  });
+
+  app.get('/led1/off', (_req: Request, res: Response) => {
+    const c3Dev = devices.find(d => d.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL');
+    if (c3Dev && c3Dev.pins.V2) {
+      c3Dev.pins.V2.value = 0;
+      broadcastSSE('device_update', { deviceId: c3Dev.id, device: c3Dev });
+    }
+    res.setHeader('Content-Type', 'text/plain');
+    res.send('0');
+  });
+
+  app.get('/led2/on', (_req: Request, res: Response) => {
+    const c3Dev = devices.find(d => d.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL');
+    if (c3Dev && c3Dev.pins.V3) {
+      c3Dev.pins.V3.value = 1;
+      broadcastSSE('device_update', { deviceId: c3Dev.id, device: c3Dev });
+    }
+    res.setHeader('Content-Type', 'text/plain');
+    res.send('1');
+  });
+
+  app.get('/led2/off', (_req: Request, res: Response) => {
+    const c3Dev = devices.find(d => d.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL');
+    if (c3Dev && c3Dev.pins.V3) {
+      c3Dev.pins.V3.value = 0;
+      broadcastSSE('device_update', { deviceId: c3Dev.id, device: c3Dev });
+    }
+    res.setHeader('Content-Type', 'text/plain');
+    res.send('0');
   });
 
   // GET /api/iot/history -> Telemetry chart data points

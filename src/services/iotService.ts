@@ -141,14 +141,14 @@ class IoTService {
   }
 
   // Update a pin value via REST API & Local IP if present
-  public async updatePin(token: string, pin: VirtualPinId, value: number | string): Promise<boolean> {
+  public async updatePin(token: string, pin: VirtualPinId, value: number | string, customIp?: string, deviceId?: string): Promise<boolean> {
     try {
       // 1. If user entered a local IP (e.g. 192.168.0.169), dispatch direct LAN call immediately
-      const savedIp = typeof window !== 'undefined' ? (localStorage.getItem('sps_peh_chip_ip') || '192.168.0.169') : null;
+      const savedIp = customIp || (typeof window !== 'undefined' ? (localStorage.getItem(`sps_peh_chip_ip_${deviceId || ''}`) || localStorage.getItem('sps_peh_chip_ip') || '192.168.0.169') : null);
       if (savedIp) {
         try {
           const actionPath = Number(value) === 1 ? 'on' : 'off';
-          const targetUrl = `http://${savedIp}/${actionPath}?t=${Date.now()}`;
+          const targetUrl = `http://${savedIp}/${actionPath}?pin=${pin.toLowerCase()}&val=${value}&t=${Date.now()}`;
           const ifr = (document.getElementById('esp_hidden_sender') as HTMLIFrameElement) || document.createElement('iframe');
           ifr.id = 'esp_hidden_sender';
           ifr.style.display = 'none';
@@ -157,16 +157,44 @@ class IoTService {
           }
           ifr.src = targetUrl;
           fetch(`http://${savedIp}/control?pin=${pin.toLowerCase()}&val=${value}`, { mode: 'no-cors' }).catch(() => {});
+          fetch(`http://${savedIp}/set?pin=${pin.toLowerCase()}&val=${value}`, { mode: 'no-cors' }).catch(() => {});
           fetch(`http://${savedIp}/api/update?${pin.toLowerCase()}=${value}`, { mode: 'no-cors' }).catch(() => {});
         } catch (e) {}
       }
 
-      const res = await fetch(`/api/iot/update?token=${encodeURIComponent(token)}&pin=${encodeURIComponent(pin)}&value=${encodeURIComponent(value)}`);
+      const res = await fetch(`/api/iot/update?token=${encodeURIComponent(token)}&pin=${encodeURIComponent(pin)}&value=${encodeURIComponent(value)}&ip=${encodeURIComponent(savedIp || '')}`);
       const json = await res.json();
       return json.success;
     } catch (e) {
       console.error('Failed to update pin', e);
       return false;
+    }
+  }
+
+  // Direct fetch/poll from ESP32 IP
+  public async pollDeviceDirectIp(ip: string): Promise<{ success: boolean; data?: any; latencyMs?: number; error?: string }> {
+    const startTime = Date.now();
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(`http://${ip}/status`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      const latencyMs = Date.now() - startTime;
+      if (res.ok) {
+        const data = await res.json();
+        return { success: true, data, latencyMs };
+      }
+      return { success: false, error: `HTTP ${res.status}`, latencyMs };
+    } catch (err: any) {
+      // Try backend proxy if direct browser fetch hit CORS or network block
+      try {
+        const proxyRes = await fetch(`/api/iot/chip/poll-ip?ip=${encodeURIComponent(ip)}`);
+        const json = await proxyRes.json();
+        const latencyMs = Date.now() - startTime;
+        return { success: json.success, data: json.data, latencyMs, error: json.error };
+      } catch (proxyErr: any) {
+        return { success: false, error: err?.message || 'Connection failed', latencyMs: Date.now() - startTime };
+      }
     }
   }
 
@@ -276,3 +304,16 @@ class IoTService {
 }
 
 export const iotService = new IoTService();
+
+export async function pollDeviceDirectIp(ip: string): Promise<{ online: boolean; mode?: string; status?: any }> {
+  try {
+    const res = await iotService.pollDeviceDirectIp(ip);
+    return {
+      online: res.success,
+      mode: res.data?.mode || 'Dual-Mode AP+STA',
+      status: res.data
+    };
+  } catch {
+    return { online: false };
+  }
+}

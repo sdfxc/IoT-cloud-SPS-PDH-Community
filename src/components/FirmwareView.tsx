@@ -131,7 +131,9 @@ export const FirmwareView: React.FC<FirmwareViewProps> = ({ device, lang }) => {
   const [customCode, setCustomCode] = useState<string>('');
   const [editorFontSize, setEditorFontSize] = useState<number>(13);
   const [codeSavedNotification, setCodeSavedNotification] = useState(false);
-  const [editorTemplatePreset, setEditorTemplatePreset] = useState<'esp32_cam_urlencode' | 'esp32_devkit' | 'esp32_direct_webserver' | 'esp8266_nodemcu'>('esp32_cam_urlencode');
+  const [editorTemplatePreset, setEditorTemplatePreset] = useState<
+    'esp32_cam_smartlamp' | 'esp32_30pin_alert' | 'esp32_30pin_smartbin' | 'esp32_30pin_irrigation' | 'esp32_30pin_traffic' | 'esp32_direct_webserver' | 'esp32c3_smartbin_dualwall'
+  >('esp32c3_smartbin_dualwall');
 
   // --- REMOTE CHIP CONTROLLER STATE ---
   const [remoteLampState, setRemoteLampState] = useState<number>(
@@ -168,12 +170,13 @@ export const FirmwareView: React.FC<FirmwareViewProps> = ({ device, lang }) => {
     }
   }, [device]);
 
-  // 1. ESP32-CAM AI-Thinker Code with UrlEncode & Telegram Alerts (User Exact Project Specification)
-  const esp32CamUrlEncodeCode = `/*
+  // 1. ESP32-CAM AI-Thinker Code with Dual-Mode AP+STA + Captive Portal + Telegram
+  const esp32CamSmartLampCode = `/*
  * ==============================================================================
- * Project: Smart_Lamp & MQ135 Air Sensor on ESP32-CAM + Telegram Alerts
+ * Project: Smart_Lamp & MQ135 Air Sensor on ESP32-CAM (Dual-Mode AP+STA)
  * Hardware: ESP32-CAM (AI-Thinker)
- * Organization: SPS-PEH
+ * Wi-Fi: AP (192.168.0.169) + STA (Router) + Captive Portal (Port 53)
+ * Telegram Alerts: Enabled (Instant Alert on Lamp Toggle & MQ135 Gas Detection)
  * ==============================================================================
  */
 
@@ -184,12 +187,19 @@ export const FirmwareView: React.FC<FirmwareViewProps> = ({ device, lang }) => {
 
 #define BLYNK_PRINT Serial
 #include <WiFi.h>
+#include <WebServer.h>
+#include <DNSServer.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
-#include <UrlEncode.h> // ប្រើ Library UrlEncode ដើម្បីស្រួលផ្ញើអក្សរខ្មែរ
+#include <UrlEncode.h>
 #include <BlynkSimpleEsp32.h>
 
-// ---------------------- 2. WIFI & TELEGRAM CREDENTIALS ------------------------
+// ---------------------- 2. WIFI CREDENTIALS & DUAL-MODE SETUP -----------------
+const char* ap_ssid = "SmartLamp-ESP32CAM";
+const char* ap_pass = "12345678";
+IPAddress apIP(192, 168, 0, 169);
+IPAddress netMsk(255, 255, 255, 0);
+
 char ssid[] = "${wifiSsid}";
 char pass[] = "${wifiPass}";
 
@@ -201,145 +211,222 @@ const char* TELEGRAM_CHAT_ID   = "${telegramChatId}";
 #define MQ135_PIN            ${mq135Pin}   // GPIO ${mq135Pin} (Digital Input / DO) for MQ-135 (V1)
 #define ONBOARD_FLASH_LED     4   // Built-in Flash LED on GPIO 4
 
+WebServer server(80);
+DNSServer dnsServer;
 BlynkTimer timer;
 bool lastAlarmSent = false;
 unsigned long lastTgMsgTime = 0;
+bool lampState = false;
 
 // ---------------------- 4. TELEGRAM SENDER FUNCTION --------------------------
 void sendTelegramAlert(String message) {
   if (WiFi.status() != WL_CONNECTED) return;
-
   WiFiClientSecure client;
-  client.setInsecure(); // Skip SSL certificate check for ESP32-CAM
-
+  client.setInsecure(); // Skip SSL certificate check
   HTTPClient https;
-  // ប្រើ urlEncode() លើសារអក្សរខ្មែរ ឬ Emoji ដោយស្វ័យប្រវត្តិ
   String url = "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) + 
                "/sendMessage?chat_id=" + String(TELEGRAM_CHAT_ID) + 
                "&text=" + urlEncode(message) + "&parse_mode=HTML";
-
-  Serial.println("[Telegram] Sending alert...");
   https.begin(client, url);
-  int httpCode = https.GET();
-  if (httpCode > 0) {
-    Serial.printf("[Telegram] Message sent! (HTTP %d)\\n", httpCode);
-  } else {
-    Serial.printf("[Telegram] Error: %s\\n", https.errorToString(httpCode).c_str());
-  }
+  https.GET();
   https.end();
 }
 
-// ---------------------- 5. BLYNK VIRTUAL PIN LISTENERS -----------------------
-// V0: Smart_Lamp Relay Switch
+// ---------------------- 5. HTTP WEB SERVER & CAPTIVE PORTAL ------------------
+void handleRoot() {
+  String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>";
+  html += "<title>ESP32-CAM Smart Lamp Dashboard</title>";
+  html += "<style>body{font-family:sans-serif;background:#0f172a;color:#f8fafc;text-align:center;padding:25px;margin:0;}";
+  html += ".card{background:#1e293b;border-radius:18px;padding:24px;max-width:440px;margin:auto;border:1px solid #334155;box-shadow:0 10px 25px rgba(0,0,0,0.5);}";
+  html += ".btn{display:inline-block;padding:14px 28px;font-size:16px;font-weight:bold;color:#fff;border-radius:12px;text-decoration:none;margin:8px;border:none;cursor:pointer;}";
+  html += ".btn-on{background:#10b981;} .btn-off{background:#ef4444;} .status-box{padding:12px;background:#0f172a;border-radius:10px;margin:15px 0;font-size:14px;}</style></head><body>";
+  html += "<div class='card'>";
+  html += "<h2 style='color:#38bdf8;margin-top:0;'>💡 SPS-PEH Smart Lamp & MQ135</h2>";
+  html += "<p style='color:#94a3b8;font-size:13px;'>Dual-Mode: <b>AP (192.168.0.169)</b> + <b>STA Router</b></p>";
+  html += "<div class='status-box'>";
+  html += "<p style='margin:4px 0;'>Lamp Relay: " + String(lampState ? "<b style='color:#10b981'>ON (បើក)</b>" : "<b style='color:#ef4444'>OFF (បិទ)</b>") + "</p>";
+  html += "<p style='margin:4px 0;'>MQ-135 Gas: " + String(digitalRead(MQ135_PIN) == LOW ? "<b style='color:#ef4444'>HAZARD ALERT</b>" : "<b style='color:#10b981'>NORMAL (SAFE)</b>") + "</p>";
+  html += "<p style='margin:4px 0;'>WiFi Mode: <b>WIFI_AP_STA (Captive Portal 53)</b></p>";
+  html += "</div>";
+  html += "<a href='/on' class='btn btn-on'>💡 បើកភ្លើង (TURN ON)</a>";
+  html += "<a href='/off' class='btn btn-off'>⭕ បិទភ្លើង (TURN OFF)</a>";
+  html += "</div></body></html>";
+  server.send(200, "text/html", html);
+}
+
+void handleControl() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  if (server.hasArg("val")) {
+    int val = server.arg("val").toInt();
+    lampState = (val == 1);
+    digitalWrite(SMART_LAMP_PIN, ${relayActiveLow ? 'lampState ? LOW : HIGH' : 'lampState ? HIGH : LOW'});
+    digitalWrite(ONBOARD_FLASH_LED, lampState ? HIGH : LOW);
+    Blynk.virtualWrite(V0, val);
+    server.send(200, "application/json", "{\\"success\\":true,\\"lamp\\":" + String(val) + "}");
+    return;
+  }
+  server.send(400, "text/plain", "Missing val parameter");
+}
+
+void handleOn() {
+  lampState = true;
+  digitalWrite(SMART_LAMP_PIN, ${relayActiveLow ? 'LOW' : 'HIGH'});
+  digitalWrite(ONBOARD_FLASH_LED, HIGH);
+  Blynk.virtualWrite(V0, 1);
+  sendTelegramAlert("💡 <b>[ESP32-CAM Smart_Lamp]</b> កុងតាក់ត្រូវបានបើក (ON) ✅");
+  handleRoot();
+}
+
+void handleOff() {
+  lampState = false;
+  digitalWrite(SMART_LAMP_PIN, ${relayActiveLow ? 'HIGH' : 'LOW'});
+  digitalWrite(ONBOARD_FLASH_LED, LOW);
+  Blynk.virtualWrite(V0, 0);
+  sendTelegramAlert("💡 <b>[ESP32-CAM Smart_Lamp]</b> កុងតាក់ត្រូវបានបិទ (OFF) ⭕");
+  handleRoot();
+}
+
+void handleStatus() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  String json = "{\\"status\\":\\"online\\",\\"device\\":\\"SmartLamp-ESP32CAM\\",\\"mode\\":\\"WIFI_AP_STA\\",";
+  json += "\\"ap_ip\\":\\"" + WiFi.softAPIP().toString() + "\\",";
+  json += "\\"sta_ip\\":\\"" + WiFi.localIP().toString() + "\\",";
+  json += "\\"lamp\\":" + String(lampState ? 1 : 0) + ",";
+  json += "\\"mq135\\":" + String(digitalRead(MQ135_PIN) == LOW ? 1 : 0) + ",";
+  json += "\\"rssi\\":" + String(WiFi.RSSI()) + "}";
+  server.send(200, "application/json", json);
+}
+
+// ---------------------- 6. BLYNK VIRTUAL PIN LISTENERS -----------------------
 BLYNK_WRITE(V0) {
-  int lampState = param.asInt();
-
-  // 💡 ចំណាំសំខាន់សម្រាប់ Relay Module៖
-  // Relay Module ៩៩% លើទីផ្សារជាប្រភេទ Active LOW (LOW = បើក ON, HIGH = បិទ OFF)
-  // ប្រសិនបើជា LED ធម្មតា (HIGH = ON, LOW = OFF)
-  ${relayActiveLow ? `// កំណត់សម្រាប់ Relay Module (Active LOW)
-  digitalWrite(SMART_LAMP_PIN, lampState == 1 ? LOW : HIGH);` : `// កំណត់សម្រាប់ LED ធម្មតា (Active HIGH)
-  digitalWrite(SMART_LAMP_PIN, lampState == 1 ? HIGH : LOW);`}
-
-  // 📸 បើក Flash LED ពណ៌សនៅលើ ESP32-CAM (GPIO 4) ដំណាលគ្នាដើម្បីងាយស្រួលដឹងថា Chip ដំណើរការ
-  digitalWrite(ONBOARD_FLASH_LED, lampState == 1 ? HIGH : LOW);
-
-  Serial.print("[Blynk] Smart_Lamp (GPIO ${lampPin} / V0) -> ");
-  Serial.println(lampState == 1 ? "ON (Relay ON / Flash ON)" : "OFF (Relay OFF / Flash OFF)");
-
-  String statusMsg = lampState == 1 
+  int val = param.asInt();
+  lampState = (val == 1);
+  digitalWrite(SMART_LAMP_PIN, ${relayActiveLow ? 'lampState ? LOW : HIGH' : 'lampState ? HIGH : LOW'});
+  digitalWrite(ONBOARD_FLASH_LED, lampState ? HIGH : LOW);
+  String statusMsg = lampState 
     ? "💡 <b>[ESP32-CAM Smart_Lamp]</b> កុងតាក់ត្រូវបានបើក (ON) ✅"
     : "💡 <b>[ESP32-CAM Smart_Lamp]</b> កុងតាក់ត្រូវបានបិទ (OFF) ⭕";
   sendTelegramAlert(statusMsg);
 }
 
-// ---------------------- 6. SENSOR TELEMETRY & ALARM SENDER -------------------
+// ---------------------- 7. SENSOR TELEMETRY & ALARM SENDER -------------------
 void sendMQ135Telemetry() {
   int gasDigital = digitalRead(MQ135_PIN);
-  
-  // 💡 ប្រសិនបើ MQ135 DO Module របស់អ្នកជា Active LOW (ភាគច្រើន)៖
-  bool isGasAlert = (gasDigital == LOW); // កែជា HIGH វិញ ប្រសិនបើ Module របស់អ្នកជា Active HIGH
-
+  bool isGasAlert = (gasDigital == LOW);
   Blynk.virtualWrite(V1, isGasAlert ? 1 : 0);
   Blynk.virtualWrite(V8, WiFi.RSSI());
 
-  Serial.printf("[ESP32-CAM] MQ135 Digital (GPIO ${mq135Pin}): %s | WiFi RSSI: %d dBm\\n", 
-                isGasAlert ? "HAZARD DETECTED" : "NORMAL", WiFi.RSSI());
-
   if (isGasAlert) {
-    if (!lastAlarmSent || (millis() - lastTgMsgTime > 60000)) { // Limit alert 1 mn
+    if (!lastAlarmSent || (millis() - lastTgMsgTime > 60000)) {
       lastAlarmSent = true;
       lastTgMsgTime = millis();
-      String alertMsg = "⚠️ <b>[ESP32-CAM MQ-135 អាសន្នផ្សែងពុល]</b>\\n"
-                        "🚨 ស្ថានភាព: <b>រកឃើញមានផ្សែងពុល!</b>\\n"
-                        "📍 ESP32-CAM Pin ${mq135Pin}\\n"
-                        "⚠️ សូមប្រុងប្រយ័ត្ន និងបើកកង្ហារបន្សុទ្ធខ្យល់!";
-      sendTelegramAlert(alertMsg);
+      sendTelegramAlert("⚠️ <b>[ESP32-CAM MQ-135 អាសន្នផ្សែងពុល]</b>\\n🚨 រកឃើញមានផ្សែងពុល!\\n📍 ESP32-CAM Pin ${mq135Pin}");
     }
   } else {
     if (lastAlarmSent) {
       lastAlarmSent = false;
-      String safeMsg = "✅ <b>[ESP32-CAM MQ-135 សុវត្ថិភាពឡើងវិញ]</b>\\n"
-                       "🌿 កម្រិតខ្យល់: <b>មានសុវត្ថិភាព (Normal)</b>";
-      sendTelegramAlert(safeMsg);
+      sendTelegramAlert("✅ <b>[ESP32-CAM MQ-135 សុវត្ថិភាពឡើងវិញ]</b>\\n🌿 កម្រិតខ្យល់មានសុវត្ថិភាព!");
     }
   }
 }
 
-// ---------------------- 7. SETUP ---------------------------------------------
+// ---------------------- 8. SETUP ---------------------------------------------
 void setup() {
   Serial.begin(115200);
-  delay(1000);
-  Serial.println("\\n[SPS-PEH] Booting ESP32-CAM Smart_Lamp & MQ135 Node...");
+  delay(500);
 
   pinMode(SMART_LAMP_PIN, OUTPUT);
-  pinMode(MQ135_PIN, INPUT_PULLUP); // ប្រើ PULLUP ដើម្បីការពារ Signal រំខាន
+  pinMode(MQ135_PIN, INPUT_PULLUP);
   pinMode(ONBOARD_FLASH_LED, OUTPUT);
-  
-  // បិទ Relay ឬ LED ជាមុនពេល Boot
   digitalWrite(SMART_LAMP_PIN, ${relayActiveLow ? 'HIGH' : 'LOW'});
   digitalWrite(ONBOARD_FLASH_LED, LOW);
 
+  // 1. Dual-Mode Wi-Fi Architecture (WIFI_AP_STA)
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAPConfig(apIP, apIP, netMsk);
+  WiFi.softAP(ap_ssid, ap_pass);
+  Serial.println("[Wi-Fi] AP Mode Created: " + String(ap_ssid) + " (IP: " + WiFi.softAPIP().toString() + ")");
+
+  // 2. Start Captive Portal DNS Server on Port 53
+  dnsServer.start(53, "*", apIP);
+
+  // 3. Connect to Home Router Wi-Fi & Blynk Cloud
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
 
-  sendTelegramAlert("🚀 <b>[ESP32-CAM]</b> Smart_Lamp & MQ135 Node ភ្ជាប់ជោគជ័យ! ✅");
+  // 4. Register HTTP Web Server Endpoints
+  server.on("/", handleRoot);
+  server.on("/control", handleControl);
+  server.on("/status", handleStatus);
+  server.on("/on", handleOn);
+  server.on("/off", handleOff);
+  server.onNotFound([]() {
+    server.sendHeader("Location", "http://192.168.0.169/", true);
+    server.send(302, "text/plain", "Redirecting to Captive Portal");
+  });
+  server.begin();
 
+  sendTelegramAlert("🚀 <b>[ESP32-CAM]</b> Dual-Mode AP+STA + Captive Portal ដំណើរការជោគជ័យ! ✅\\nIP: 192.168.0.169");
   timer.setInterval(${intervalMs}L, sendMQ135Telemetry);
 }
 
-// ---------------------- 8. MAIN LOOP -----------------------------------------
+// ---------------------- 9. MAIN LOOP -----------------------------------------
 void loop() {
-  Blynk.run();
+  dnsServer.processNextRequest(); // Handle Captive Portal Redirects
+  server.handleClient();          // Handle Direct Web Server Requests
+  Blynk.run();                    // Sync with Blynk Cloud
   timer.run();
 }
 `;
 
-  // 2. ESP32 DevKit WROOM-32
-  const esp32DevKitCode = `/*
- * Project: ESP32 DevKit WROOM-32 Smart_Lamp & MQ-135 Node
- * Organization: SPS-PEH
+  // 2. Device 1: Alert System (ESP32 30-Pin)
+  const esp32AlertSystemCode = `/*
+ * ==============================================================================
+ * Project: Device 1 - Alert System on ESP32 30-Pin (Dual-Mode AP+STA)
+ * Hardware: ESP32-WROOM-32D 30-Pin
+ * Sensors: MQ-2 Gas (GPIO 34 ADC), Air Pressure (GPIO 21), Water Level (GPIO 35)
+ * Actuators: Siren Buzzer (GPIO 2), Strobe LED (GPIO 22), Exhaust Fan PWM (GPIO 19)
+ * Wi-Fi: AP (192.168.0.169) + STA (Router) + Captive Portal (Port 53)
+ * Telegram Alerts: Enabled
+ * ==============================================================================
  */
-#define BLYNK_TEMPLATE_ID   "${blynkTemplateId}"
-#define BLYNK_TEMPLATE_NAME "${blynkTemplateName}"
-#define BLYNK_AUTH_TOKEN    "${blynkAuthToken}"
+#define BLYNK_TEMPLATE_ID    "TMPL_ALERT_SYSTEM"
+#define BLYNK_TEMPLATE_NAME  "Alert System"
+#define BLYNK_AUTH_TOKEN     "${blynkAuthToken}"
 
 #define BLYNK_PRINT Serial
 #include <WiFi.h>
+#include <WebServer.h>
+#include <DNSServer.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <UrlEncode.h>
 #include <BlynkSimpleEsp32.h>
+
+// Wi-Fi Credentials
+const char* ap_ssid = "AlertSystem-ESP32";
+const char* ap_pass = "12345678";
+IPAddress apIP(192, 168, 0, 169);
+IPAddress netMsk(255, 255, 255, 0);
 
 char ssid[] = "${wifiSsid}";
 char pass[] = "${wifiPass}";
 const char* TELEGRAM_BOT_TOKEN = "${telegramBotToken}";
 const char* TELEGRAM_CHAT_ID   = "${telegramChatId}";
 
-#define PIN_SMART_LAMP       ${lampPin}
-#define PIN_MQ135_DO         ${mq135Pin}
+// Hardware 30-Pin GPIOs
+#define PIN_MQ2_GAS          34   // ADC Input for MQ-2 (V0)
+#define PIN_PRESSURE         21   // Pressure Sensor (V1)
+#define PIN_WATER_LEVEL      35   // Water Level Sensor (V2)
+#define PIN_STROBE_LIGHT     22   // Strobe LED Light (V3)
+#define PIN_FAN_PWM          19   // Fan Speed PWM (V4)
+#define PIN_SIREN_BUZZER      2   // Emergency Siren Buzzer (V6)
 
+WebServer server(80);
+DNSServer dnsServer;
 BlynkTimer timer;
-bool lastAlarmSent = false;
+bool sirenState = false;
+bool strobeState = false;
+int fanSpeed = 80;
 unsigned long lastTgMsgTime = 0;
 
 void sendTelegramAlert(String message) {
@@ -355,140 +442,899 @@ void sendTelegramAlert(String message) {
   https.end();
 }
 
-BLYNK_WRITE(V0) {
-  int val = param.asInt();
-  digitalWrite(PIN_SMART_LAMP, val == 1 ? HIGH : LOW);
-  if (val == 1) {
-    sendTelegramAlert("💡 <b>អំពូលកំពុងបើក</b>");
-  } else {
-    sendTelegramAlert("⭕ <b>អំពូលត្រូវបានបិទ</b>");
-  }
+void handleRoot() {
+  String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>";
+  html += "<title>Alert System ESP32 Dashboard</title>";
+  html += "<style>body{font-family:sans-serif;background:#0f172a;color:#fff;text-align:center;padding:20px;}";
+  html += ".card{background:#1e293b;border-radius:16px;padding:20px;max-width:440px;margin:auto;border:1px solid #334155;}";
+  html += ".btn{display:inline-block;padding:12px 20px;margin:6px;border-radius:10px;font-weight:bold;color:#fff;text-decoration:none;}";
+  html += ".btn-danger{background:#ef4444;} .btn-safe{background:#10b981;} .btn-warn{background:#f59e0b;}</style></head><body>";
+  html += "<div class='card'><h2>🚨 Alert System (ESP32 30-Pin)</h2>";
+  html += "<p style='color:#94a3b8;'>Dual-Mode: <b>192.168.0.169</b> + Home Wi-Fi</p>";
+  html += "<div style='background:#0f172a;padding:12px;border-radius:10px;margin:12px 0;'>";
+  html += "<p>Siren Status: " + String(sirenState ? "<b style='color:#ef4444'>ALARM ON</b>" : "<b style='color:#10b981'>OFF</b>") + "</p>";
+  html += "<p>Strobe Light: " + String(strobeState ? "<b style='color:#f59e0b'>ACTIVE</b>" : "<b style='color:#64748b'>IDLE</b>") + "</p>";
+  html += "<p>Fan Speed: <b>" + String(fanSpeed) + "%</b></p>";
+  html += "</div>";
+  html += "<a href='/control?pin=v6&val=1' class='btn btn-danger'>🚨 បើកស៊ីរ៉ែន (Siren ON)</a>";
+  html += "<a href='/control?pin=v6&val=0' class='btn btn-safe'>បិទស៊ីរ៉ែន (Siren OFF)</a>";
+  html += "<a href='/control?pin=v3&val=1' class='btn btn-warn'>ភ្លើងសញ្ញា (Strobe)</a>";
+  html += "</div></body></html>";
+  server.send(200, "text/html", html);
 }
 
-void checkMQ135() {
-  int gasDigital = digitalRead(PIN_MQ135_DO);
-  bool isAlert = (gasDigital == HIGH);
-  Blynk.virtualWrite(V1, isAlert ? 1 : 0);
-  Blynk.virtualWrite(V8, WiFi.RSSI());
+void handleControl() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  String pin = server.arg("pin");
+  int val = server.arg("val").toInt();
+  if (pin == "v6" || pin == "V6") {
+    sirenState = (val == 1);
+    digitalWrite(PIN_SIREN_BUZZER, sirenState ? HIGH : LOW);
+    Blynk.virtualWrite(V6, val);
+    if (sirenState) sendTelegramAlert("🚨 <b>[Alert System]</b> ស៊ីរ៉ែនប្រកាសអាសន្នត្រូវបានបើក!");
+  } else if (pin == "v3" || pin == "V3") {
+    strobeState = (val == 1);
+    digitalWrite(PIN_STROBE_LIGHT, strobeState ? HIGH : LOW);
+    Blynk.virtualWrite(V3, val);
+  } else if (pin == "v4" || pin == "V4") {
+    fanSpeed = val;
+    analogWrite(PIN_FAN_PWM, map(val, 0, 100, 0, 255));
+    Blynk.virtualWrite(V4, val);
+  }
+  server.send(200, "application/json", "{\\"success\\":true}");
+}
 
-  if (isAlert && (!lastAlarmSent || (millis() - lastTgMsgTime > 60000))) {
-    lastAlarmSent = true;
+void handleStatus() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  String json = "{\\"device\\":\\"AlertSystem-ESP32\\",\\"mode\\":\\"WIFI_AP_STA\\",";
+  json += "\\"gas_co\\":" + String(analogRead(PIN_MQ2_GAS)) + ",";
+  json += "\\"siren\\":" + String(sirenState ? 1 : 0) + ",";
+  json += "\\"strobe\\":" + String(strobeState ? 1 : 0) + ",";
+  json += "\\"fan\\":" + String(fanSpeed) + "}";
+  server.send(200, "application/json", json);
+}
+
+// Blynk writes
+BLYNK_WRITE(V6) {
+  sirenState = (param.asInt() == 1);
+  digitalWrite(PIN_SIREN_BUZZER, sirenState ? HIGH : LOW);
+}
+BLYNK_WRITE(V3) {
+  strobeState = (param.asInt() == 1);
+  digitalWrite(PIN_STROBE_LIGHT, strobeState ? HIGH : LOW);
+}
+BLYNK_WRITE(V4) {
+  fanSpeed = param.asInt();
+  analogWrite(PIN_FAN_PWM, map(fanSpeed, 0, 100, 0, 255));
+}
+
+void checkSensors() {
+  int gasVal = analogRead(PIN_MQ2_GAS);
+  Blynk.virtualWrite(V0, map(gasVal, 0, 4095, 0, 500));
+  Blynk.virtualWrite(V2, map(analogRead(PIN_WATER_LEVEL), 0, 4095, 0, 100));
+
+  if (gasVal > 2500 && (millis() - lastTgMsgTime > 60000)) {
     lastTgMsgTime = millis();
-    sendTelegramAlert("⚠️ <b>[ESP32 MQ-135 អាសន្នផ្សែងពុល]</b>\\n🚨 រកឃើញមានផ្សែងពុល!");
-  } else if (!isAlert && lastAlarmSent) {
-    lastAlarmSent = false;
-    sendTelegramAlert("✅ <b>[ESP32 MQ-135]</b> ខ្យល់ល្អឡើងវិញ!");
+    sendTelegramAlert("⚠️ <b>[Alert System អាសន្នឧស្ម័ន/ផ្សែង!]</b>\\n🔥 រកឃើញកម្រិតឧស្ម័នខ្ពស់ខ្លាំង!\\n💨 ស៊ីរ៉ែន & កង្ហារត្រូវបានបើកស្វ័យប្រវត្តិ!");
+    digitalWrite(PIN_SIREN_BUZZER, HIGH);
+    analogWrite(PIN_FAN_PWM, 255);
   }
 }
 
 void setup() {
   Serial.begin(115200);
-  pinMode(PIN_SMART_LAMP, OUTPUT);
-  pinMode(PIN_MQ135_DO, INPUT);
-  digitalWrite(PIN_SMART_LAMP, LOW);
+  pinMode(PIN_MQ2_GAS, INPUT);
+  pinMode(PIN_WATER_LEVEL, INPUT);
+  pinMode(PIN_STROBE_LIGHT, OUTPUT);
+  pinMode(PIN_FAN_PWM, OUTPUT);
+  pinMode(PIN_SIREN_BUZZER, OUTPUT);
+
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAPConfig(apIP, apIP, netMsk);
+  WiFi.softAP(ap_ssid, ap_pass);
+  dnsServer.start(53, "*", apIP);
+
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
-  timer.setInterval(2000L, checkMQ135);
+
+  server.on("/", handleRoot);
+  server.on("/control", handleControl);
+  server.on("/status", handleStatus);
+  server.onNotFound([]() {
+    server.sendHeader("Location", "http://192.168.0.169/", true);
+    server.send(302, "text/plain", "Redirecting");
+  });
+  server.begin();
+
+  timer.setInterval(2000L, checkSensors);
+  sendTelegramAlert("🚀 <b>[Alert System ESP32 30-Pin]</b> Online! IP: 192.168.0.169");
 }
 
 void loop() {
+  dnsServer.processNextRequest();
+  server.handleClient();
   Blynk.run();
   timer.run();
 }
 `;
 
-  // 3. Standalone Direct Web Server (No Blynk Required - Direct Browser to Chip Control)
+  // 3. Device 2: Smart Bin (ESP32 30-Pin / C3)
+  const esp32SmartBinCode = `/*
+ * ==============================================================================
+ * Project: Device 2 - Smart Bin on ESP32 30-Pin / ESP32-C3 (Dual-Mode AP+STA)
+ * Hardware: ESP32 30-Pin / ESP32-C3
+ * Sensors: Ultrasonic Dry (Trig 14, Echo 35), Ultrasonic Wet (Trig 27, Echo 34), Odor Gas (GPIO 32)
+ * Actuators: Servo Lid Motor (GPIO 18), Spray Relay (GPIO 23)
+ * Wi-Fi: AP (192.168.0.169) + STA (Router) + Captive Portal (Port 53)
+ * Telegram Alerts: Enabled (Alert when Bin > 80% Full or Odor Detected)
+ * ==============================================================================
+ */
+#define BLYNK_TEMPLATE_ID    "TMPL_SMART_BIN"
+#define BLYNK_TEMPLATE_NAME  "Smart Bin"
+#define BLYNK_AUTH_TOKEN     "${blynkAuthToken}"
+
+#define BLYNK_PRINT Serial
+#include <WiFi.h>
+#include <WebServer.h>
+#include <DNSServer.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#include <UrlEncode.h>
+#include <BlynkSimpleEsp32.h>
+#include <ESP32Servo.h>
+
+const char* ap_ssid = "SmartBin-ESP32";
+const char* ap_pass = "12345678";
+IPAddress apIP(192, 168, 0, 169);
+IPAddress netMsk(255, 255, 255, 0);
+
+char ssid[] = "${wifiSsid}";
+char pass[] = "${wifiPass}";
+const char* TELEGRAM_BOT_TOKEN = "${telegramBotToken}";
+const char* TELEGRAM_CHAT_ID   = "${telegramChatId}";
+
+#define PIN_SERVO_LID        18   // Servo for Bin Lid (V0 / V9)
+#define PIN_SPRAY_RELAY      23   // Deodorizer Spray Relay (V6)
+#define PIN_DRY_TRIG         14
+#define PIN_DRY_ECHO         35   // Ultrasonic Dry (V1)
+#define PIN_WET_TRIG         27
+#define PIN_WET_ECHO         34   // Ultrasonic Wet (V2)
+#define PIN_ODOR_GAS         32   // Odor Sensor (V3)
+
+WebServer server(80);
+DNSServer dnsServer;
+BlynkTimer timer;
+Servo lidServo;
+bool lidOpen = false;
+bool sprayState = false;
+unsigned long lastBinTgTime = 0;
+
+void sendTelegramAlert(String message) {
+  if (WiFi.status() != WL_CONNECTED) return;
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient https;
+  String url = "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) + 
+               "/sendMessage?chat_id=" + String(TELEGRAM_CHAT_ID) + 
+               "&text=" + urlEncode(message) + "&parse_mode=HTML";
+  https.begin(client, url);
+  https.GET();
+  https.end();
+}
+
+void handleRoot() {
+  String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>";
+  html += "<title>Smart Bin Dashboard</title>";
+  html += "<style>body{font-family:sans-serif;background:#0f172a;color:#fff;text-align:center;padding:20px;}";
+  html += ".card{background:#1e293b;border-radius:16px;padding:20px;max-width:440px;margin:auto;}";
+  html += ".btn{display:inline-block;padding:12px 24px;margin:6px;border-radius:10px;font-weight:bold;color:#fff;text-decoration:none;}";
+  html += ".btn-open{background:#10b981;} .btn-close{background:#ef4444;} .btn-spray{background:#06b6d4;}</style></head><body>";
+  html += "<div class='card'><h2>🗑️ Smart Bin Controller</h2>";
+  html += "<p style='color:#94a3b8;'>Dual-Mode: <b>192.168.0.169</b> + Home Wi-Fi</p>";
+  html += "<p>Lid Status: " + String(lidOpen ? "<b style='color:#10b981'>OPEN (បើក)</b>" : "<b style='color:#ef4444'>CLOSED (បិទ)</b>") + "</p>";
+  html += "<a href='/control?pin=v0&val=1' class='btn btn-open'>🗑️ បើកគម្រប (Open Lid)</a>";
+  html += "<a href='/control?pin=v0&val=0' class='btn btn-close'>បិទគម្រប (Close)</a>";
+  html += "<a href='/control?pin=v6&val=1' class='btn btn-spray'>💨 បាញ់ថ្នាំបំបាត់ក្លិន</a>";
+  html += "</div></body></html>";
+  server.send(200, "text/html", html);
+}
+
+void handleControl() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  String pin = server.arg("pin");
+  int val = server.arg("val").toInt();
+  if (pin == "v0" || pin == "V0") {
+    lidOpen = (val == 1);
+    lidServo.write(lidOpen ? 90 : 0);
+    Blynk.virtualWrite(V0, val);
+  } else if (pin == "v6" || pin == "V6") {
+    sprayState = (val == 1);
+    digitalWrite(PIN_SPRAY_RELAY, sprayState ? HIGH : LOW);
+    Blynk.virtualWrite(V6, val);
+  }
+  server.send(200, "application/json", "{\\"success\\":true}");
+}
+
+void handleStatus() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  String json = "{\\"device\\":\\"SmartBin-ESP32\\",\\"mode\\":\\"WIFI_AP_STA\\",";
+  json += "\\"lid\\":" + String(lidOpen ? 1 : 0) + ",";
+  json += "\\"spray\\":" + String(sprayState ? 1 : 0) + "}";
+  server.send(200, "application/json", json);
+}
+
+BLYNK_WRITE(V0) {
+  lidOpen = (param.asInt() == 1);
+  lidServo.write(lidOpen ? 90 : 0);
+}
+BLYNK_WRITE(V6) {
+  sprayState = (param.asInt() == 1);
+  digitalWrite(PIN_SPRAY_RELAY, sprayState ? HIGH : LOW);
+}
+
+void checkBinSensors() {
+  // Ultrasonic dry waste read
+  digitalWrite(PIN_DRY_TRIG, LOW); delayMicroseconds(2);
+  digitalWrite(PIN_DRY_TRIG, HIGH); delayMicroseconds(10);
+  digitalWrite(PIN_DRY_TRIG, LOW);
+  long duration = pulseIn(PIN_DRY_ECHO, HIGH, 25000);
+  int dist = (duration > 0) ? duration * 0.034 / 2 : 50;
+  int dryPercent = constrain(map(dist, 30, 5, 0, 100), 0, 100);
+
+  Blynk.virtualWrite(V1, dryPercent);
+  Blynk.virtualWrite(V3, analogRead(PIN_ODOR_GAS));
+
+  if (dryPercent >= 85 && (millis() - lastBinTgTime > 60000)) {
+    lastBinTgTime = millis();
+    sendTelegramAlert("⚠️ <b>[Smart Bin ធុងសម្រាមពេញ!]</b>\\n🗑️ កម្រិតសម្រាមស្ងួត: <b>" + String(dryPercent) + "%</b>\\n📍 សូមបញ្ជូនរថយន្តប្រមូលសម្រាម!");
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  lidServo.attach(PIN_SERVO_LID);
+  lidServo.write(0);
+  pinMode(PIN_SPRAY_RELAY, OUTPUT);
+  pinMode(PIN_DRY_TRIG, OUTPUT);
+  pinMode(PIN_DRY_ECHO, INPUT);
+  pinMode(PIN_ODOR_GAS, INPUT);
+
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAPConfig(apIP, apIP, netMsk);
+  WiFi.softAP(ap_ssid, ap_pass);
+  dnsServer.start(53, "*", apIP);
+
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+
+  server.on("/", handleRoot);
+  server.on("/control", handleControl);
+  server.on("/status", handleStatus);
+  server.onNotFound([]() {
+    server.sendHeader("Location", "http://192.168.0.169/", true);
+    server.send(302, "text/plain", "Redirecting");
+  });
+  server.begin();
+
+  timer.setInterval(2500L, checkBinSensors);
+  sendTelegramAlert("🚀 <b>[Smart Bin ESP32]</b> Online! IP: 192.168.0.169");
+}
+
+void loop() {
+  dnsServer.processNextRequest();
+  server.handleClient();
+  Blynk.run();
+  timer.run();
+}
+`;
+
+  // 4. Device 3: Smart Irrigation (ESP32 30-Pin)
+  const esp32IrrigationCode = `/*
+ * ==============================================================================
+ * Project: Device 3 - Smart Irrigation on ESP32 30-Pin (Dual-Mode AP+STA)
+ * Hardware: ESP32-WROOM-32D 30-Pin
+ * Sensors: Soil Moisture (GPIO 35 ADC), DHT11 Temp/Humidity (GPIO 4), Solar Angle (GPIO 19)
+ * Actuators: Water Pump Relay (GPIO 23)
+ * Wi-Fi: AP (192.168.0.169) + STA (Router) + Captive Portal (Port 53)
+ * Telegram Alerts: Enabled
+ * ==============================================================================
+ */
+#define BLYNK_TEMPLATE_ID    "TMPL6BUNdn49f"
+#define BLYNK_TEMPLATE_NAME  "Smart Irrigation"
+#define BLYNK_AUTH_TOKEN     "${blynkAuthToken}"
+
+#define BLYNK_PRINT Serial
+#include <WiFi.h>
+#include <WebServer.h>
+#include <DNSServer.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#include <UrlEncode.h>
+#include <BlynkSimpleEsp32.h>
+
+const char* ap_ssid = "SmartIrrigation-ESP32";
+const char* ap_pass = "12345678";
+IPAddress apIP(192, 168, 0, 169);
+IPAddress netMsk(255, 255, 255, 0);
+
+char ssid[] = "${wifiSsid}";
+char pass[] = "${wifiPass}";
+const char* TELEGRAM_BOT_TOKEN = "${telegramBotToken}";
+const char* TELEGRAM_CHAT_ID   = "${telegramChatId}";
+
+#define PIN_PUMP_RELAY       23   // Water Pump Relay (V0)
+#define PIN_SOIL_MOISTURE    35   // Soil Moisture ADC (V1)
+#define PIN_DHT11            4    // DHT11 Sensor (V2)
+#define PIN_SOLAR_SERVO      19   // Solar Panel Servo (V7)
+
+WebServer server(80);
+DNSServer dnsServer;
+BlynkTimer timer;
+bool pumpState = false;
+bool autoMode = true;
+
+void sendTelegramAlert(String message) {
+  if (WiFi.status() != WL_CONNECTED) return;
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient https;
+  String url = "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) + 
+               "/sendMessage?chat_id=" + String(TELEGRAM_CHAT_ID) + 
+               "&text=" + urlEncode(message) + "&parse_mode=HTML";
+  https.begin(client, url);
+  https.GET();
+  https.end();
+}
+
+void handleRoot() {
+  String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>";
+  html += "<title>Smart Irrigation Dashboard</title>";
+  html += "<style>body{font-family:sans-serif;background:#0f172a;color:#fff;text-align:center;padding:20px;}";
+  html += ".card{background:#1e293b;border-radius:16px;padding:20px;max-width:440px;margin:auto;}";
+  html += ".btn{display:inline-block;padding:12px 24px;margin:6px;border-radius:10px;font-weight:bold;color:#fff;text-decoration:none;}";
+  html += ".btn-pump{background:#0284c7;} .btn-off{background:#ef4444;}</style></head><body>";
+  html += "<div class='card'><h2>🌱 Smart Irrigation System</h2>";
+  html += "<p style='color:#94a3b8;'>Dual-Mode: <b>192.168.0.169</b> + Home Wi-Fi</p>";
+  html += "<p>Water Pump: " + String(pumpState ? "<b style='color:#38bdf8'>PUMPING (បើក)</b>" : "<b style='color:#ef4444'>OFF (បិទ)</b>") + "</p>";
+  html += "<a href='/control?pin=v0&val=1' class='btn btn-pump'>🚰 បើកម៉ូទ័របូមទឹក (Pump ON)</a>";
+  html += "<a href='/control?pin=v0&val=0' class='btn btn-off'>⭕ បិទម៉ូទ័រ (Pump OFF)</a>";
+  html += "</div></body></html>";
+  server.send(200, "text/html", html);
+}
+
+void handleControl() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  int val = server.arg("val").toInt();
+  pumpState = (val == 1);
+  digitalWrite(PIN_PUMP_RELAY, pumpState ? LOW : HIGH); // Active LOW relay
+  Blynk.virtualWrite(V0, val);
+  sendTelegramAlert(pumpState ? "🌱 <b>[Irrigation]</b> ម៉ូទ័របូមទឹកត្រូវបានបើក ✅" : "🌱 <b>[Irrigation]</b> ម៉ូទ័របូមទឹកត្រូវបានបិទ ⭕");
+  server.send(200, "application/json", "{\\"success\\":true,\\"pump\\":" + String(val) + "}");
+}
+
+BLYNK_WRITE(V0) {
+  pumpState = (param.asInt() == 1);
+  digitalWrite(PIN_PUMP_RELAY, pumpState ? LOW : HIGH);
+}
+BLYNK_WRITE(V3) {
+  autoMode = (param.asInt() == 1);
+}
+
+void checkSoil() {
+  int raw = analogRead(PIN_SOIL_MOISTURE);
+  int moistPercent = constrain(map(raw, 4095, 1500, 0, 100), 0, 100);
+  Blynk.virtualWrite(V1, moistPercent);
+
+  if (autoMode && moistPercent < 25 && !pumpState) {
+    pumpState = true;
+    digitalWrite(PIN_PUMP_RELAY, LOW);
+    Blynk.virtualWrite(V0, 1);
+    sendTelegramAlert("💧 <b>[Irrigation ស្វ័យប្រវត្តិ]</b>\\n🌱 សំណើមដីធ្លាក់ចុះទាប (<b>" + String(moistPercent) + "%</b>)\\n🚰 ម៉ូទ័របូមទឹកត្រូវបានបើក!");
+  } else if (autoMode && moistPercent >= 70 && pumpState) {
+    pumpState = false;
+    digitalWrite(PIN_PUMP_RELAY, HIGH);
+    Blynk.virtualWrite(V0, 0);
+    sendTelegramAlert("✅ <b>[Irrigation ស្វ័យប្រវត្តិ]</b>\\n🌱 សំណើមដីគ្រប់គ្រាន់ (<b>" + String(moistPercent) + "%</b>)\\n⭕ ម៉ូទ័រត្រូវបានបិទ!");
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(PIN_PUMP_RELAY, OUTPUT);
+  pinMode(PIN_SOIL_MOISTURE, INPUT);
+  digitalWrite(PIN_PUMP_RELAY, HIGH); // Default OFF
+
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAPConfig(apIP, apIP, netMsk);
+  WiFi.softAP(ap_ssid, ap_pass);
+  dnsServer.start(53, "*", apIP);
+
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+
+  server.on("/", handleRoot);
+  server.on("/control", handleControl);
+  server.onNotFound([]() {
+    server.sendHeader("Location", "http://192.168.0.169/", true);
+    server.send(302, "text/plain", "Redirecting");
+  });
+  server.begin();
+
+  timer.setInterval(3000L, checkSoil);
+  sendTelegramAlert("🚀 <b>[Smart Irrigation ESP32]</b> Online! IP: 192.168.0.169");
+}
+
+void loop() {
+  dnsServer.processNextRequest();
+  server.handleClient();
+  Blynk.run();
+  timer.run();
+}
+`;
+
+  // 5. Device 4: Traffic & Parking (ESP32 30-Pin)
+  const esp32TrafficParkingCode = `/*
+ * ==============================================================================
+ * Project: Device 4 - Traffic & Parking on ESP32 30-Pin (Dual-Mode AP+STA)
+ * Hardware: ESP32-WROOM-32D 30-Pin
+ * Actuators: Traffic Lamp (GPIO 22), Street Light (GPIO 23), Gate Barrier Servo (GPIO 18)
+ * Sensors: Parking IR (GPIO 35), Road A IR (GPIO 34), Road B IR (GPIO 32)
+ * Wi-Fi: AP (192.168.0.169) + STA (Router) + Captive Portal (Port 53)
+ * Telegram Alerts: Enabled
+ * ==============================================================================
+ */
+#define BLYNK_TEMPLATE_ID    "TMPL_TRAFFIC_PARKING"
+#define BLYNK_TEMPLATE_NAME  "Traffic & Parking"
+#define BLYNK_AUTH_TOKEN     "${blynkAuthToken}"
+
+#define BLYNK_PRINT Serial
+#include <WiFi.h>
+#include <WebServer.h>
+#include <DNSServer.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#include <UrlEncode.h>
+#include <BlynkSimpleEsp32.h>
+#include <ESP32Servo.h>
+
+const char* ap_ssid = "TrafficParking-ESP32";
+const char* ap_pass = "12345678";
+IPAddress apIP(192, 168, 0, 169);
+IPAddress netMsk(255, 255, 255, 0);
+
+char ssid[] = "${wifiSsid}";
+char pass[] = "${wifiPass}";
+const char* TELEGRAM_BOT_TOKEN = "${telegramBotToken}";
+const char* TELEGRAM_CHAT_ID   = "${telegramChatId}";
+
+#define PIN_TRAFFIC_LAMP     22   // Traffic Lamp Relay (V0)
+#define PIN_STREET_LIGHT     23   // Street Light Relay (V4)
+#define PIN_GATE_SERVO       18   // Gate Barrier Servo (V6)
+#define PIN_PARKING_IR       35   // Parking Sensor (V1)
+#define PIN_ROADA_IR         34   // Road A IR (V2)
+#define PIN_ROADB_IR         32   // Road B IR (V3)
+
+WebServer server(80);
+DNSServer dnsServer;
+BlynkTimer timer;
+Servo gateServo;
+bool lampState = true;
+bool streetState = true;
+bool gateOpen = false;
+
+void sendTelegramAlert(String message) {
+  if (WiFi.status() != WL_CONNECTED) return;
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient https;
+  String url = "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) + 
+               "/sendMessage?chat_id=" + String(TELEGRAM_CHAT_ID) + 
+               "&text=" + urlEncode(message) + "&parse_mode=HTML";
+  https.begin(client, url);
+  https.GET();
+  https.end();
+}
+
+void handleRoot() {
+  String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>";
+  html += "<title>Traffic & Parking Dashboard</title>";
+  html += "<style>body{font-family:sans-serif;background:#0f172a;color:#fff;text-align:center;padding:20px;}";
+  html += ".card{background:#1e293b;border-radius:16px;padding:20px;max-width:440px;margin:auto;}";
+  html += ".btn{display:inline-block;padding:12px 24px;margin:6px;border-radius:10px;font-weight:bold;color:#fff;text-decoration:none;}";
+  html += ".btn-lamp{background:#eab308;} .btn-street{background:#f59e0b;} .btn-gate{background:#06b6d4;}</style></head><body>";
+  html += "<div class='card'><h2>🚦 Traffic & Parking Node</h2>";
+  html += "<p style='color:#94a3b8;'>Dual-Mode: <b>192.168.0.169</b> + Home Wi-Fi</p>";
+  html += "<a href='/control?pin=v0&val=" + String(lampState ? 0 : 1) + "' class='btn btn-lamp'>💡 កុងតាក់ Lamp</a>";
+  html += "<a href='/control?pin=v4&val=" + String(streetState ? 0 : 1) + "' class='btn btn-street'>🌃 Street Light</a>";
+  html += "<a href='/control?pin=v6&val=" + String(gateOpen ? 0 : 1) + "' class='btn btn-gate'>🚧 របាំងច្រកទ្វារ Gate</a>";
+  html += "</div></body></html>";
+  server.send(200, "text/html", html);
+}
+
+void handleControl() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  String pin = server.arg("pin");
+  int val = server.arg("val").toInt();
+  if (pin == "v0" || pin == "V0") {
+    lampState = (val == 1);
+    digitalWrite(PIN_TRAFFIC_LAMP, lampState ? HIGH : LOW);
+    Blynk.virtualWrite(V0, val);
+  } else if (pin == "v4" || pin == "V4") {
+    streetState = (val == 1);
+    digitalWrite(PIN_STREET_LIGHT, streetState ? HIGH : LOW);
+    Blynk.virtualWrite(V4, val);
+  } else if (pin == "v6" || pin == "V6") {
+    gateOpen = (val == 1);
+    gateServo.write(gateOpen ? 90 : 0);
+    Blynk.virtualWrite(V6, val);
+    sendTelegramAlert(gateOpen ? "🚧 <b>[Traffic Gate]</b> របាំងច្រកទ្វារត្រូវបានបើក!" : "🚧 <b>[Traffic Gate]</b> របាំងច្រកទ្វារត្រូវបានបិទ!");
+  }
+  server.send(200, "application/json", "{\\"success\\":true}");
+}
+
+BLYNK_WRITE(V0) {
+  lampState = (param.asInt() == 1);
+  digitalWrite(PIN_TRAFFIC_LAMP, lampState ? HIGH : LOW);
+}
+BLYNK_WRITE(V4) {
+  streetState = (param.asInt() == 1);
+  digitalWrite(PIN_STREET_LIGHT, streetState ? HIGH : LOW);
+}
+BLYNK_WRITE(V6) {
+  gateOpen = (param.asInt() == 1);
+  gateServo.write(gateOpen ? 90 : 0);
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(PIN_TRAFFIC_LAMP, OUTPUT);
+  pinMode(PIN_STREET_LIGHT, OUTPUT);
+  gateServo.attach(PIN_GATE_SERVO);
+  gateServo.write(0);
+
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAPConfig(apIP, apIP, netMsk);
+  WiFi.softAP(ap_ssid, ap_pass);
+  dnsServer.start(53, "*", apIP);
+
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+
+  server.on("/", handleRoot);
+  server.on("/control", handleControl);
+  server.onNotFound([]() {
+    server.sendHeader("Location", "http://192.168.0.169/", true);
+    server.send(302, "text/plain", "Redirecting");
+  });
+  server.begin();
+
+  sendTelegramAlert("🚀 <b>[Traffic & Parking ESP32 30-Pin]</b> Online! IP: 192.168.0.169");
+}
+
+void loop() {
+  dnsServer.processNextRequest();
+  server.handleClient();
+  Blynk.run();
+}
+`;
+
+  // 6. Standalone Direct Web Server (No Blynk Required)
   const esp32DirectWebServerCode = `/*
- * Project: ESP32 Standalone Web Server for Direct Browser-to-Chip Remote Control
- * No Blynk Server required - Control via Local IP or mDNS
+ * Project: ESP32 Standalone Dual-Mode Web Server & Captive Portal
+ * No Blynk Server required - Local AP + Router WiFi Direct Control
  */
 #include <WiFi.h>
 #include <WebServer.h>
+#include <DNSServer.h>
+
+const char* ap_ssid = "ESP32-DualMode-Direct";
+const char* ap_pass = "12345678";
+IPAddress apIP(192, 168, 0, 169);
+IPAddress netMsk(255, 255, 255, 0);
 
 const char* ssid = "${wifiSsid}";
 const char* password = "${wifiPass}";
 
 WebServer server(80);
+DNSServer dnsServer;
 #define PIN_LAMP ${lampPin}
-#define PIN_MQ135 ${mq135Pin}
+
+bool lampState = false;
 
 void handleRoot() {
-  String html = "<html><body style='font-family:sans-serif;text-align:center;padding:40px;background:#0f172a;color:#fff;'>";
-  html += "<h2>💡 SPS-PEH ESP32 Direct Chip Controller</h2>";
-  html += "<p>Status: Lamp is " + String(digitalRead(PIN_LAMP) == HIGH ? "<b style='color:#10b981'>ON</b>" : "<b style='color:#ef4444'>OFF</b>") + "</p>";
-  html += "<a href='/control?pin=v0&val=1'><button style='padding:12px 24px;background:#10b981;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer;margin:5px;'>TURN ON (បើក)</button></a> ";
-  html += "<a href='/control?pin=v0&val=0'><button style='padding:12px 24px;background:#ef4444;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer;margin:5px;'>TURN OFF (បិទ)</button></a>";
-  html += "</body></html>";
+  String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>";
+  html += "<title>ESP32 Direct Controller</title>";
+  html += "<style>body{font-family:sans-serif;text-align:center;padding:30px;background:#0f172a;color:#fff;}";
+  html += ".card{background:#1e293b;padding:24px;border-radius:18px;max-width:400px;margin:auto;}";
+  html += ".btn{display:inline-block;padding:14px 28px;font-size:16px;font-weight:bold;color:#fff;border-radius:12px;text-decoration:none;margin:8px;}";
+  html += ".btn-on{background:#10b981;} .btn-off{background:#ef4444;}</style></head><body>";
+  html += "<div class='card'>";
+  html += "<h2>💡 SPS-PEH Direct Chip Control</h2>";
+  html += "<p>Status: " + String(lampState ? "<b style='color:#10b981'>ON</b>" : "<b style='color:#ef4444'>OFF</b>") + "</p>";
+  html += "<a href='/on' class='btn btn-on'>TURN ON (បើក)</a> ";
+  html += "<a href='/off' class='btn btn-off'>TURN OFF (បិទ)</a>";
+  html += "</div></body></html>";
   server.send(200, "text/html", html);
 }
 
 void handleControl() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
   if (server.hasArg("val")) {
     int val = server.arg("val").toInt();
-    digitalWrite(PIN_LAMP, val == 1 ? HIGH : LOW);
-    server.sendHeader("Access-Control-Allow-Origin", "*");
+    lampState = (val == 1);
+    digitalWrite(PIN_LAMP, lampState ? HIGH : LOW);
     server.send(200, "application/json", "{\\"success\\":true,\\"lamp\\":" + String(val) + "}");
     return;
   }
   server.send(400, "text/plain", "Missing val");
 }
 
+void handleOn() {
+  lampState = true;
+  digitalWrite(PIN_LAMP, HIGH);
+  handleRoot();
+}
+
+void handleOff() {
+  lampState = false;
+  digitalWrite(PIN_LAMP, LOW);
+  handleRoot();
+}
+
 void setup() {
   Serial.begin(115200);
   pinMode(PIN_LAMP, OUTPUT);
-  pinMode(PIN_MQ135, INPUT_PULLUP);
   digitalWrite(PIN_LAMP, LOW);
 
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAPConfig(apIP, apIP, netMsk);
+  WiFi.softAP(ap_ssid, ap_pass);
+  dnsServer.start(53, "*", apIP);
+
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("\\nWiFi connected. IP address: " + WiFi.localIP().toString());
 
   server.on("/", handleRoot);
   server.on("/control", handleControl);
+  server.on("/on", handleOn);
+  server.on("/off", handleOff);
+  server.onNotFound([]() {
+    server.sendHeader("Location", "http://192.168.0.169/", true);
+    server.send(302, "text/plain", "Captive Portal Redirect");
+  });
   server.begin();
 }
 
 void loop() {
+  dnsServer.processNextRequest();
   server.handleClient();
 }
 `;
 
-  // 4. ESP8266 NodeMCU Code
-  const esp8266CppCode = `/*
- * Project: ESP8266 NodeMCU Smart_Lamp & MQ135
+  // 7. Device 6: ESP32-C3 Smart Bin & Dual Golden Wall Switch (Exact Match to User Code)
+  const esp32C3SmartBinDualCode = `/*
+ * ==============================================================================
+ * Project: ESP32-C3 Smart Bin & Dual Golden Rocker Wall Switch (SGT)
+ * Hardware: ESP32-C3 SuperMini / Mini (RISC-V)
+ * Wi-Fi: AP ("SmartBin-ESP32" 192.168.4.1) + STA ("${wifiSsid}")
+ * Ultrasonic HC-SR04: TRIG (GPIO 2), ECHO (GPIO 3) -> 20cm=0%, 5cm=100%
+ * Dual Golden Wall Switch: LED1 / Switch 1 (GPIO 8), LED2 / Switch 2 (GPIO 9)
+ * Telegram Alerts: Bot "${telegramBotToken}" -> Chat ID "${telegramChatId}"
+ * ==============================================================================
  */
-#define BLYNK_TEMPLATE_ID   "${blynkTemplateId}"
-#define BLYNK_TEMPLATE_NAME "${blynkTemplateName}"
-#define BLYNK_AUTH_TOKEN    "${blynkAuthToken}"
 
-#include <ESP8266WiFi.h>
-#include <BlynkSimpleEsp8266.h>
+#include <WiFi.h>
+#include <WebServer.h>
+#include <DNSServer.h>
+#include <HTTPClient.h>
 
-char ssid[] = "${wifiSsid}";
-char pass[] = "${wifiPass}";
+// Define ESP32-C3 Pins
+#define TRIG_PIN 2
+#define ECHO_PIN 3
+#define LED1_PIN 8
+#define LED2_PIN 9
 
-#define PIN_LAMP D1
-#define PIN_MQ135 D2
+// Bin Dimensions (in cm)
+const float EMPTY_DISTANCE = 20.0; // 20cm = 0% Full
+const float FULL_DISTANCE  = 5.0;  // 5cm  = 100% Full
 
-BlynkTimer timer;
+// 1. ESP32 Hotspot Credentials (សម្រាប់ទូរស័ព្ទភ្ជាប់ត្រង់)
+const char* ap_ssid = "SmartBin-ESP32";
+const char* ap_password = "12345678";
 
-BLYNK_WRITE(V0) {
-  int val = param.asInt();
-  digitalWrite(PIN_LAMP, val == 1 ? HIGH : LOW);
+// 2. Wi-Fi Home/Router Credentials (សម្រាប់ ESP32 ភ្ជាប់អុីនធឺណិត)
+const char* wifi_ssid = "${wifiSsid}";        // ដាក់ឈ្មោះ Wi-Fi ផ្ទះ
+const char* wifi_password = "${wifiPass}"; // ដាក់លេខសម្ងាត់ Wi-Fi
+
+// Telegram Bot Credentials
+const String BOT_TOKEN = "${telegramBotToken}";
+const String CHAT_ID   = "${telegramChatId}";
+
+IPAddress local_ip(192, 168, 4, 1);
+IPAddress gateway(192, 168, 4, 1);
+IPAddress subnet(255, 255, 255, 0);
+
+WebServer server(80);
+DNSServer dnsServer;
+
+bool led1State = false;
+bool led2State = false;
+bool telegramSent = false; 
+
+// --- Function to Measure Distance via Ultrasonic ---
+float getDistance() {
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+
+  long duration = pulseIn(ECHO_PIN, HIGH, 30000); // 30ms timeout
+  if (duration == 0) return 999.0;
+  return duration * 0.034 / 2.0;
 }
+
+// --- Function to Calculate Percentage ---
+int getFillLevel(float distance) {
+  if (distance >= EMPTY_DISTANCE) return 0;
+  if (distance <= FULL_DISTANCE)  return 100;
+  return (int)((EMPTY_DISTANCE - distance) / (EMPTY_DISTANCE - FULL_DISTANCE) * 100.0);
+}
+
+// --- Function to Send Telegram Alert ---
+void sendTelegram(String message) {
+  if (WiFi.status() != WL_CONNECTED) return;
+  HTTPClient http;
+  String url = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage?chat_id=" + CHAT_ID + "&text=" + message;
+  http.begin(url);
+  http.GET();
+  http.end();
+}
+
+// --- Embedded Web UI with Live Vertical Gauge and Dual Golden Rockers ---
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32-C3 Smart Bin & Dual Switch</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: #0f172a; color: #f8fafc; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
+        .dashboard-container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; width: 90%; max-width: 900px; }
+        .card { background-color: #1e293b; border-radius: 16px; padding: 25px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5); width: 340px; display: flex; flex-direction: column; align-items: center; border: 1px solid #334155; }
+        h2 { margin-top: 0; font-size: 1.3rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1.5px; }
+        .tank-container { width: 140px; height: 260px; border: 4px solid #475569; border-radius: 20px; position: relative; overflow: hidden; background: #0f172a; box-shadow: inset 0 0 10px rgba(0,0,0,0.8); }
+        .water-fill { position: absolute; bottom: 0; width: 100%; height: 0%; background: #10b981; transition: height 0.6s ease, background 0.6s ease; }
+        .percentage-text { position: absolute; width: 100%; top: 45%; text-align: center; font-size: 2rem; font-weight: 800; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.8); z-index: 2; }
+        .distance-info { margin-top: 15px; font-size: 1.1rem; color: #38bdf8; font-weight: bold; }
+        .switch-board { width: 100%; max-width: 320px; background: linear-gradient(145deg, #dfb76c, #99742a); padding: 15px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; box-shadow: 0 10px 20px rgba(0,0,0,0.6); }
+        .sgt-logo { font-size: 1.2rem; font-weight: 900; color: #3d2c06; letter-spacing: 2px; margin-bottom: 12px; }
+        .rocker-container { display: flex; gap: 15px; justify-content: center; width: 100%; }
+        .rocker-switch { width: 110px; height: 180px; background: linear-gradient(to bottom, #d4af37, #aa7c11); border: 2px solid #5c4308; border-radius: 12px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; padding: 12px 6px; box-sizing: border-box; cursor: pointer; user-select: none; box-shadow: 0 8px 12px rgba(0,0,0,0.4); transition: transform 0.1s; }
+        .rocker-switch:active { transform: scale(0.98); }
+        .led-indicator { width: 45px; height: 6px; background-color: #3d2c06; border-radius: 4px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.5); }
+        .power-icon { width: 28px; height: 28px; fill: #4a3507; margin-bottom: 5px; }
+        .rocker-switch.active { background: linear-gradient(to bottom, #aa7c11, #d4af37); }
+        .rocker-switch.active .led-indicator { background-color: #00f2fe; box-shadow: 0 0 12px #00f2fe, inset 0 0 2px #fff; }
+        .rocker-switch.active .power-icon { fill: #00f2fe; filter: drop-shadow(0 0 4px #00f2fe); }
+        .label { font-size: 0.85rem; font-weight: bold; color: #4a3507; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="card">
+            <h2>Smart Bin Level</h2>
+            <div class="tank-container">
+                <div class="water-fill" id="fillBar"></div>
+                <div class="percentage-text" id="levelText">0%</div>
+            </div>
+            <div class="distance-info">Distance: <span id="distText">--</span> cm</div>
+        </div>
+        <div class="card">
+            <h2>Dual Switch Control</h2>
+            <div class="switch-board">
+                <div class="sgt-logo">SGT</div>
+                <div class="rocker-container">
+                    <div class="rocker-switch" id="btn1" onclick="toggleLED(1)">
+                        <div class="led-indicator"></div>
+                        <span class="label">SWITCH 1</span>
+                        <svg class="power-icon" viewBox="0 0 24 24"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/></svg>
+                    </div>
+                    <div class="rocker-switch" id="btn2" onclick="toggleLED(2)">
+                        <div class="led-indicator"></div>
+                        <span class="label">SWITCH 2</span>
+                        <svg class="power-icon" viewBox="0 0 24 24"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/></svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        let s1 = false, s2 = false;
+        function toggleLED(btnNum) {
+            let active = (btnNum === 1) ? !s1 : !s2;
+            fetch('/led' + btnNum + '/' + (active ? 'on' : 'off'))
+                .then(r => r.text()).then(d => {
+                    if (btnNum === 1) { s1 = (d === "1"); document.getElementById('btn1').classList.toggle('active', s1); }
+                    else { s2 = (d === "1"); document.getElementById('btn2').classList.toggle('active', s2); }
+                });
+        }
+        setInterval(() => {
+            fetch('/data').then(r => r.json()).then(d => {
+                document.getElementById('distText').innerText = d.distance.toFixed(1);
+                document.getElementById('levelText').innerText = d.level + '%';
+                let bar = document.getElementById('fillBar');
+                bar.style.height = d.level + '%';
+                bar.style.background = d.level < 50 ? '#10b981' : (d.level < 85 ? '#f59e0b' : '#ef4444');
+            });
+        }, 1500);
+    </script>
+</body>
+</html>
+)rawliteral";
 
 void setup() {
   Serial.begin(115200);
-  pinMode(PIN_LAMP, OUTPUT);
-  pinMode(PIN_MQ135, INPUT);
-  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  pinMode(LED1_PIN, OUTPUT);
+  pinMode(LED2_PIN, OUTPUT);
+  digitalWrite(LED1_PIN, LOW);
+  digitalWrite(LED2_PIN, LOW);
+
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAPConfig(local_ip, gateway, subnet);
+  WiFi.softAP(ap_ssid, ap_password);
+  dnsServer.start(53, "*", local_ip);
+
+  WiFi.begin(wifi_ssid, wifi_password);
+  
+  // Wait up to 10s for Wi-Fi Router Connection
+  int retry = 0;
+  while (WiFi.status() != WL_CONNECTED && retry < 20) {
+    delay(500);
+    retry++;
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    sendTelegram("WiFi ភ្ជាប់ជោគជ័យ! IP: " + WiFi.localIP().toString());
+  }
+
+  server.on("/", []() { server.send_P(200, "text/html", index_html); });
+  server.on("/data", []() {
+    float dist = getDistance();
+    int lvl = getFillLevel(dist);
+    String json = "{\"distance\":" + String(dist) + ",\"level\":" + String(lvl) + "}";
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.send(200, "application/json", json);
+  });
+
+  server.on("/led1/on", []() { digitalWrite(LED1_PIN, HIGH); led1State = true; server.send(200, "text/plain", "1"); });
+  server.on("/led1/off", []() { digitalWrite(LED1_PIN, LOW); led1State = false; server.send(200, "text/plain", "0"); });
+  server.on("/led2/on", []() { digitalWrite(LED2_PIN, HIGH); led2State = true; server.send(200, "text/plain", "1"); });
+  server.on("/led2/off", []() { digitalWrite(LED2_PIN, LOW); led2State = false; server.send(200, "text/plain", "0"); });
+
+  server.onNotFound([]() {
+    server.sendHeader("Location", "http://192.168.4.1/", true);
+    server.send(302, "text/plain", "Redirecting to Captive Portal");
+  });
+
+  server.begin();
 }
 
 void loop() {
-  Blynk.run();
-  timer.run();
+  dnsServer.processNextRequest();
+  server.handleClient();
+
+  static unsigned long lastCheck = 0;
+  if (millis() - lastCheck > 2000) {
+    lastCheck = millis();
+    float dist = getDistance();
+    int lvl = getFillLevel(dist);
+
+    if (lvl >= 100 && !telegramSent) {
+      sendTelegram("សូមមកប្រមូលសម្រាមជាបន្ទាន់ សម្រាមពេញហើយ!!!");
+      telegramSent = true;
+    } else if (lvl < 80) {
+      telegramSent = false;
+    }
+  }
 }
 `;
 
@@ -498,16 +1344,19 @@ void loop() {
     if (saved && saved.length > 50) {
       setCustomCode(saved);
     } else {
-      setCustomCode(esp32CamUrlEncodeCode);
+      setCustomCode(esp32C3SmartBinDualCode);
     }
   }, []);
 
-  const handleTemplateChange = (preset: 'esp32_cam_urlencode' | 'esp32_devkit' | 'esp32_direct_webserver' | 'esp8266_nodemcu') => {
+  const handleTemplateChange = (preset: 'esp32_cam_smartlamp' | 'esp32_30pin_alert' | 'esp32_30pin_smartbin' | 'esp32_30pin_irrigation' | 'esp32_30pin_traffic' | 'esp32_direct_webserver' | 'esp32c3_smartbin_dualwall') => {
     setEditorTemplatePreset(preset);
-    let newCode = esp32CamUrlEncodeCode;
-    if (preset === 'esp32_devkit') newCode = esp32DevKitCode;
+    let newCode = esp32CamSmartLampCode;
+    if (preset === 'esp32_30pin_alert') newCode = esp32AlertSystemCode;
+    if (preset === 'esp32_30pin_smartbin') newCode = esp32SmartBinCode;
+    if (preset === 'esp32_30pin_irrigation') newCode = esp32IrrigationCode;
+    if (preset === 'esp32_30pin_traffic') newCode = esp32TrafficParkingCode;
     if (preset === 'esp32_direct_webserver') newCode = esp32DirectWebServerCode;
-    if (preset === 'esp8266_nodemcu') newCode = esp8266CppCode;
+    if (preset === 'esp32c3_smartbin_dualwall') newCode = esp32C3SmartBinDualCode;
     setCustomCode(newCode);
     localStorage.setItem('sps_peh_custom_arduino_code', newCode);
   };
@@ -520,10 +1369,13 @@ void loop() {
   };
 
   const resetCustomCodeToCurrentTemplate = () => {
-    let base = esp32CamUrlEncodeCode;
-    if (editorTemplatePreset === 'esp32_devkit') base = esp32DevKitCode;
+    let base = esp32CamSmartLampCode;
+    if (editorTemplatePreset === 'esp32_30pin_alert') base = esp32AlertSystemCode;
+    if (editorTemplatePreset === 'esp32_30pin_smartbin') base = esp32SmartBinCode;
+    if (editorTemplatePreset === 'esp32_30pin_irrigation') base = esp32IrrigationCode;
+    if (editorTemplatePreset === 'esp32_30pin_traffic') base = esp32TrafficParkingCode;
     if (editorTemplatePreset === 'esp32_direct_webserver') base = esp32DirectWebServerCode;
-    if (editorTemplatePreset === 'esp8266_nodemcu') base = esp8266CppCode;
+    if (editorTemplatePreset === 'esp32c3_smartbin_dualwall') base = esp32C3SmartBinDualCode;
     setCustomCode(base);
     localStorage.setItem('sps_peh_custom_arduino_code', base);
   };
@@ -1070,37 +1922,77 @@ void loop() {
             </div>
 
             {/* Template Presets */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-slate-400 font-semibold">{lang === 'km' ? 'គំរូកូដ Template:' : 'Preset Template:'}</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-slate-400 font-semibold mr-1">{lang === 'km' ? 'ជ្រើសរើស Device Template:' : 'Device Preset:'}</span>
               <button
-                onClick={() => handleTemplateChange('esp32_cam_urlencode')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition border ${
-                  editorTemplatePreset === 'esp32_cam_urlencode'
+                onClick={() => handleTemplateChange('esp32c3_smartbin_dualwall')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition border ${
+                  editorTemplatePreset === 'esp32c3_smartbin_dualwall'
+                    ? 'bg-amber-500/25 text-amber-300 border-amber-500/60 shadow-md ring-1 ring-amber-400/40'
+                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                }`}
+              >
+                🗑️💡 Dev 6: ESP32-C3 Smart Bin & Dual Switch (SGT)
+              </button>
+              <button
+                onClick={() => handleTemplateChange('esp32_cam_smartlamp')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition border ${
+                  editorTemplatePreset === 'esp32_cam_smartlamp'
                     ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
                     : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                 }`}
               >
-                ESP32-CAM (AI-Thinker) + UrlEncode
+                📸 Dev 5: ESP32-CAM Smart Lamp
               </button>
               <button
-                onClick={() => handleTemplateChange('esp32_devkit')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition border ${
-                  editorTemplatePreset === 'esp32_devkit'
+                onClick={() => handleTemplateChange('esp32_30pin_alert')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition border ${
+                  editorTemplatePreset === 'esp32_30pin_alert'
+                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/50 shadow-sm'
+                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                }`}
+              >
+                🚨 Dev 1: ESP32 30-Pin Alert System
+              </button>
+              <button
+                onClick={() => handleTemplateChange('esp32_30pin_smartbin')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition border ${
+                  editorTemplatePreset === 'esp32_30pin_smartbin'
                     ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
                     : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                 }`}
               >
-                ESP32 DevKit WROOM
+                🗑️ Dev 2: ESP32 30-Pin Smart Bin
+              </button>
+              <button
+                onClick={() => handleTemplateChange('esp32_30pin_irrigation')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition border ${
+                  editorTemplatePreset === 'esp32_30pin_irrigation'
+                    ? 'bg-blue-500/20 text-blue-300 border-blue-500/50 shadow-sm'
+                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                }`}
+              >
+                🌱 Dev 3: ESP32 30-Pin Irrigation
+              </button>
+              <button
+                onClick={() => handleTemplateChange('esp32_30pin_traffic')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition border ${
+                  editorTemplatePreset === 'esp32_30pin_traffic'
+                    ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50 shadow-sm'
+                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                }`}
+              >
+                🚦 Dev 4: ESP32 30-Pin Traffic
               </button>
               <button
                 onClick={() => handleTemplateChange('esp32_direct_webserver')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition border ${
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition border ${
                   editorTemplatePreset === 'esp32_direct_webserver'
                     ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
                     : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                 }`}
               >
-                Direct WebServer (No Blynk)
+                ⚡ Standalone Direct Web (No Blynk)
               </button>
             </div>
           </div>
