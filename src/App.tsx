@@ -110,9 +110,9 @@ export default function App() {
                 Object.keys(pins).forEach(pk => {
                   const pKey = pk as VirtualPinId;
                   if (mergedPins[pKey]) {
-                    // If it's a relay or switch, preserve current state unless pins explicitly has a valid value
+                    // Never let greenhouse/primary device pins overwrite unrelated devices or relays
                     const isActuator = mergedPins[pKey].type === 'relay' || mergedPins[pKey].type === 'status_led';
-                    if (!isActuator || pins[pKey].value !== undefined) {
+                    if (!isActuator) {
                       mergedPins[pKey] = { ...mergedPins[pKey], ...pins[pKey] };
                     }
                   }
@@ -132,7 +132,7 @@ export default function App() {
                 const pKey = pk as VirtualPinId;
                 if (mergedPins[pKey]) {
                   const isActuator = mergedPins[pKey].type === 'relay' || mergedPins[pKey].type === 'status_led';
-                  if (!isActuator || pins[pKey].value !== undefined) {
+                  if (!isActuator) {
                     mergedPins[pKey] = { ...mergedPins[pKey], ...pins[pKey] };
                   }
                 }

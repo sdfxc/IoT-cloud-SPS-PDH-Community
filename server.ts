@@ -27,9 +27,26 @@ function broadcastSSE(eventType: string, data: any) {
 
 // Evaluate automation rules
 function evaluateAutomations(device: IoTDevice) {
+  // Never run automated pin overrides on ESP32-C3 Wall Switch (V2/V3) or Smart Bin unless explicitly intended for it
+  if (device.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL') {
+    return;
+  }
+
   const now = Date.now();
   automations.forEach(rule => {
     if (!rule.enabled) return;
+
+    // Only apply greenhouse irrigation automations to greenhouse / irrigation devices
+    if (rule.id === 'auto_soil_irrigation' && device.templateId !== 'TMPL_SMART_IRRIGATION') {
+      return;
+    }
+    if (rule.id === 'auto_temp_fan_cooling' && device.templateId !== 'TMPL_SMART_IRRIGATION') {
+      return;
+    }
+    if (rule.id === 'auto_gas_alarm_trigger' && device.templateId !== 'TMPL_ALERT_SYSTEM') {
+      return;
+    }
+
     const sourcePinDef = device.pins[rule.sourcePin];
     if (!sourcePinDef) return;
 
@@ -203,68 +220,38 @@ setInterval(() => {
       }
     }
 
-    // 6. ESP32-C3 Smart Bin & Dual Switch & MQ-135 Air Quality simulation
+    // 6. ESP32-C3 Smart Bin & Dual Switch & MQ-135 Air Quality (Dedicated Physical Device Sync)
     if (dev.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL') {
-      if (dev.pins.V1) {
-        let dist = Number(dev.pins.V1.value);
-        dist += (Math.random() - 0.5) * 0.4;
-        dist = Number(Math.max(4.8, Math.min(20.5, dist)).toFixed(1));
-        dev.pins.V1.value = dist;
+      const dist = Number(dev.pins.V1?.value ?? 12.5);
+      // Strict ultrasonic calculation: 20cm=0%, 5cm=100%
+      let pct = 0;
+      if (dist >= 20.0) pct = 0;
+      else if (dist <= 5.0) pct = 100;
+      else pct = Math.round(((20.0 - dist) / 15.0) * 100);
 
-        // Calculate fill level: 20cm=0%, 5cm=100%
-        let pct = 0;
-        if (dist >= 20.0) pct = 0;
-        else if (dist <= 5.0) pct = 100;
-        else pct = Math.round(((20.0 - dist) / 15.0) * 100);
-
-        if (dev.pins.V0) {
-          dev.pins.V0.value = pct;
-        }
-
-        if (pct >= 100 && dev.pins.V6 && Number(dev.pins.V6.value) === 0) {
-          dev.pins.V6.value = 1;
-          const logMsg: DeviceLog = {
-            id: `tg_bin_${Date.now()}`,
-            timestamp: new Date().toLocaleTimeString(),
-            level: 'WARN',
-            deviceId: dev.id,
-            message: '[TELEGRAM ALERT] សូមមកប្រមូលសម្រាមជាបន្ទាន់! សម្រាមពេញហើយ!!! (100% Full)',
-            messageKhmer: 'ផ្ញើសារ Telegram: សូមមកប្រមូលសម្រាមជាបន្ទាន់! សម្រាមពេញហើយ!!! (កម្រិត ១០០%)',
-            source: 'TELEGRAM_BOT'
-          };
-          logs.unshift(logMsg);
-          broadcastSSE('log_added', logMsg);
-        } else if (pct < 80 && dev.pins.V6) {
-          dev.pins.V6.value = 0;
-        }
+      if (dev.pins.V0 && (dev.pins.V0.value === undefined || dev.pins.V0.value === null)) {
+        dev.pins.V0.value = pct;
       }
 
-      // MQ-135 Gas / Air Quality PPM (GPIO 0 / V4)
-      if (dev.pins.V4) {
-        let ppm = Number(dev.pins.V4.value || 285);
-        ppm += (Math.random() - 0.48) * 8;
-        ppm = Math.round(Math.max(120, Math.min(850, ppm)));
-        dev.pins.V4.value = ppm;
+      const ppm = Number(dev.pins.V4?.value ?? 120);
+      const airBad = ppm >= 400;
+      if (dev.pins.V5) {
+        dev.pins.V5.value = airBad ? 1 : 0;
+      }
 
-        const airBad = ppm >= 400;
-        if (dev.pins.V5) {
-          dev.pins.V5.value = airBad ? 1 : 0;
-        }
-
-        // Air Pollution Telegram Alert
-        if (airBad && (!dev.pins.V6 || Number(dev.pins.V6.value) === 0)) {
-          const logMsg: DeviceLog = {
-            id: `tg_air_${Date.now()}`,
-            timestamp: new Date().toLocaleTimeString(),
-            level: 'ERROR',
-            deviceId: dev.id,
-            message: `[TELEGRAM ALERT] ⚠️ អាសន្ន! មានខ្យល់ពុលខ្លាំង (${ppm} PPM) - សូមប្រុងប្រយ័ត្នចេញក្រៅសូមពាក់ម៉ាស តែបើមិនចាំបាច់សូមនៅក្នុងផ្ទះ ឬកន្លែងដែលមានបរិយាសកាសល្អ!!!`,
-            messageKhmer: `ផ្ញើសារ Telegram: ⚠️ អាសន្ន! មានខ្យល់ពុលខ្លាំង (${ppm} PPM) - សូមប្រុងប្រយ័ត្នចេញក្រៅសូមពាក់ម៉ាស!`,
-            source: 'TELEGRAM_BOT'
-          };
-          logs.unshift(logMsg);
-          broadcastSSE('log_added', logMsg);
-        }
+      // Air Pollution Telegram Alert
+      if (airBad && (!dev.pins.V6 || Number(dev.pins.V6.value) === 0)) {
+        const logMsg: DeviceLog = {
+          id: `tg_air_${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString(),
+          level: 'ERROR',
+          deviceId: dev.id,
+          message: `[TELEGRAM ALERT] ⚠️ អាសន្ន! មានខ្យល់ពុលខ្លាំង (${ppm} PPM) - សូមប្រុងប្រយ័ត្នចេញក្រៅសូមពាក់ម៉ាស តែបើមិនចាំបាច់សូមនៅក្នុងផ្ទះ ឬកន្លែងដែលមានបរិយាសកាសល្អ!!!`,
+          messageKhmer: `ផ្ញើសារ Telegram: ⚠️ អាសន្ន! មានខ្យល់ពុលខ្លាំង (${ppm} PPM) - សូមប្រុងប្រយ័ត្នចេញក្រៅសូមពាក់ម៉ាស!`,
+          source: 'TELEGRAM_BOT'
+        };
+        logs.unshift(logMsg);
+        broadcastSSE('log_added', logMsg);
       }
     }
 
@@ -730,9 +717,14 @@ async function startServer() {
   // Direct ESP32-C3 Smart Bin & Dual Switch & MQ-135 Endpoints (Exact Match to User Code)
   app.get('/data', (_req: Request, res: Response) => {
     const c3Dev = devices.find(d => d.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL') || devices[0];
-    const dist = Number(c3Dev?.pins.V1?.value || 12.5);
-    const level = Number(c3Dev?.pins.V0?.value || 45);
-    const ppm = Number(c3Dev?.pins.V4?.value || 285);
+    const dist = Number(c3Dev?.pins.V1?.value ?? 12.5);
+    let level = Number(c3Dev?.pins.V0?.value);
+    if (isNaN(level) || level === undefined) {
+      if (dist >= 20.0) level = 0;
+      else if (dist <= 5.0) level = 100;
+      else level = Math.round(((20.0 - dist) / 15.0) * 100);
+    }
+    const ppm = Number(c3Dev?.pins.V4?.value ?? 95);
     const airBad = ppm >= 400;
     res.json({
       distance: Number(dist.toFixed(1)),

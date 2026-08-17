@@ -858,11 +858,11 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         labelKhmer: 'កំហាប់ខ្យល់ពុល MQ-135 (PPM)',
         type: 'sensor_gas',
         unit: 'PPM',
-        min: 100,
+        min: 0,
         max: 1000,
-        value: 285,
+        value: 95,
         gpioPin: 0,
-        color: '#f97316',
+        color: '#10b981',
         iconName: 'Wind'
       },
       V5: {

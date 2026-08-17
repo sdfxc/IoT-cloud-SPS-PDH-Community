@@ -22,10 +22,15 @@ export const C3SmartBinDualPanel: React.FC<C3SmartBinDualPanelProps> = ({
   // Fast realtime local sensor states
   const [liveDistance, setLiveDistance] = useState<number>(Number(device.pins.V1?.value ?? 12.5));
   const [liveFillLevel, setLiveFillLevel] = useState<number>(Number(device.pins.V0?.value ?? 45));
-  const [livePpm, setLivePpm] = useState<number>(Number(device.pins.V4?.value ?? 285));
-  const [liveAirBad, setLiveAirBad] = useState<boolean>(Number(device.pins.V5?.value ?? 0) === 1 || Number(device.pins.V4?.value ?? 285) >= 400);
+  const [livePpm, setLivePpm] = useState<number>(Number(device.pins.V4?.value ?? 95));
+  const [liveAirBad, setLiveAirBad] = useState<boolean>(Number(device.pins.V5?.value ?? 0) === 1 || Number(device.pins.V4?.value ?? 95) >= 400);
   const [liveSw1, setLiveSw1] = useState<boolean>(Number(device.pins.V2?.value ?? 0) === 1);
   const [liveSw2, setLiveSw2] = useState<boolean>(Number(device.pins.V3?.value ?? 0) === 1);
+
+  // User configurable ESP32 IP for direct live connection
+  const [targetIp, setTargetIp] = useState<string>(() => localStorage.getItem('sps_esp32_c3_ip') || device.ipAddress || '192.168.4.1');
+  const [isDirectConnected, setIsDirectConnected] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string>('Live');
 
   // Keep in sync with device props when props change
   useEffect(() => {
@@ -40,12 +45,40 @@ export const C3SmartBinDualPanel: React.FC<C3SmartBinDualPanelProps> = ({
     }
   }, [device.pins.V0?.value, device.pins.V1?.value, device.pins.V2?.value, device.pins.V3?.value, device.pins.V4?.value, device.pins.V5?.value]);
 
-  // Fast Real-Time 300ms polling directly from /data endpoint and ESP32
+  // Fast Real-Time polling: Polls both physical ESP32 IP (if reachable) and server /data
   useEffect(() => {
     let isMounted = true;
     const fastPoll = async () => {
+      // 1. Try polling real physical ESP32 directly if available (e.g. 192.168.4.1 or home router IP)
+      if (targetIp && targetIp !== '0.0.0.0') {
+        try {
+          const directController = new AbortController();
+          const dTimeout = setTimeout(() => directController.abort(), 600);
+          const directRes = await fetch(`http://${targetIp}/data`, { signal: directController.signal, mode: 'cors' });
+          clearTimeout(dTimeout);
+          if (directRes.ok) {
+            const dData = await directRes.json();
+            if (isMounted && dData) {
+              setIsDirectConnected(true);
+              setLastSyncTime(new Date().toLocaleTimeString());
+              if (typeof dData.level === 'number') setLiveFillLevel(dData.level);
+              if (typeof dData.distance === 'number') setLiveDistance(dData.distance);
+              if (typeof dData.ppm === 'number') {
+                setLivePpm(dData.ppm);
+                setLiveAirBad(Boolean(dData.airBad || dData.ppm >= 400));
+              }
+              // Sync back to cloud server for consistency
+              fetch(`/api/iot/update?token=${device.authToken}&v0=${dData.level}&v1=${dData.distance}&v4=${dData.ppm}&v5=${dData.airBad ? 1 : 0}`).catch(() => {});
+              return;
+            }
+          }
+        } catch (e) {
+          if (isMounted) setIsDirectConnected(false);
+        }
+      }
+
+      // 2. Poll server /data
       try {
-        // Try local ESP32 IP first if available, otherwise server /data
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 800);
         
@@ -54,6 +87,7 @@ export const C3SmartBinDualPanel: React.FC<C3SmartBinDualPanelProps> = ({
         if (res.ok) {
           const data = await res.json();
           if (isMounted && data) {
+            setLastSyncTime(new Date().toLocaleTimeString());
             if (typeof data.level === 'number') {
               setLiveFillLevel(data.level);
             }
@@ -72,13 +106,13 @@ export const C3SmartBinDualPanel: React.FC<C3SmartBinDualPanelProps> = ({
     };
 
     fastPoll();
-    const interval = setInterval(fastPoll, 350); // 350ms ultra fast realtime
+    const interval = setInterval(fastPoll, 400); // 400ms ultra fast realtime
 
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [dashboardIp]);
+  }, [targetIp, device.authToken]);
 
   const fillLevel = liveFillLevel;
   const distance = liveDistance;
@@ -156,8 +190,24 @@ export const C3SmartBinDualPanel: React.FC<C3SmartBinDualPanelProps> = ({
           </div>
         </div>
 
-        {/* Telegram Status pill */}
-        <div className="flex items-center gap-2">
+        {/* Live ESP32 IP Sync pill & Telegram Status */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* IP Input / Direct sync badge */}
+          <div className="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700 px-2.5 py-1 rounded-xl">
+            <span className="text-[10px] text-slate-400 font-bold">ESP32 IP:</span>
+            <input
+              type="text"
+              value={targetIp}
+              onChange={(e) => {
+                setTargetIp(e.target.value);
+                localStorage.setItem('sps_esp32_c3_ip', e.target.value);
+              }}
+              placeholder="192.168.4.1"
+              className="bg-slate-900 border border-slate-700 text-amber-300 font-mono text-[11px] px-2 py-0.5 rounded w-28 focus:outline-none focus:border-amber-400 font-bold"
+            />
+            <span className={`w-2 h-2 rounded-full ${isDirectConnected ? 'bg-emerald-400 animate-ping' : 'bg-slate-500'}`} title={isDirectConnected ? 'Directly connected to ESP32 IP' : 'Syncing via Cloud Endpoint'} />
+          </div>
+
           <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 font-bold transition-all ${
             airBad || fillLevel >= 100
               ? 'bg-rose-500/20 text-rose-300 border-rose-500/50 animate-pulse'
