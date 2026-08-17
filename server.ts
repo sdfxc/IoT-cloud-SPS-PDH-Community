@@ -360,6 +360,25 @@ async function startServer() {
       }
     });
 
+    // Forward actuator pin updates (e.g. V0, V3, V4, V6) to Blynk Cloud REST API
+    // so physical ESP32 connected to Blynk Cloud receives the BLYNK_WRITE(V0) trigger instantly
+    if (device.authToken && device.authToken.length > 8 && updatedPinsList.length > 0) {
+      updatedPinsList.forEach(item => {
+        const [pinName, pinVal] = item.split('=');
+        if (pinName) {
+          const blynkPin = pinName.toLowerCase();
+          const regionalEndpoints = [
+            `https://blynk.cloud/external/api/update?token=${device.authToken}&${blynkPin}=${pinVal}`,
+            `https://sgp1.blynk.cloud/external/api/update?token=${device.authToken}&${blynkPin}=${pinVal}`,
+            `https://fra1.blynk.cloud/external/api/update?token=${device.authToken}&${blynkPin}=${pinVal}`
+          ];
+          regionalEndpoints.forEach(url => {
+            fetch(url).catch(() => {});
+          });
+        }
+      });
+    }
+
     // Trigger Telegram notification if V0 (Smart_Lamp) was toggled
     const newV0 = device.pins.V0 ? Number(device.pins.V0.value) : undefined;
     if (prevV0 !== undefined && newV0 !== undefined && prevV0 !== newV0) {
@@ -452,17 +471,31 @@ async function startServer() {
       broadcastSSE('device_update', { deviceId: device.id, device });
     }
 
-    // Forward to Blynk Cloud REST API if token available
+    // Forward to Blynk Cloud REST API across all regional clusters
     let blynkResult: any = null;
     const tokenToUse = blynkToken || (device ? device.authToken : null);
-    if (tokenToUse && tokenToUse.length > 10) {
-      try {
-        const blynkUrl = `https://blynk.cloud/external/api/update?token=${tokenToUse}&${pin.toLowerCase()}=${value}`;
-        const blynkRes = await fetch(blynkUrl, { method: 'GET' });
-        blynkResult = { ok: blynkRes.ok, status: blynkRes.status };
-      } catch (err: any) {
-        blynkResult = { ok: false, error: err?.message };
-      }
+    if (tokenToUse && tokenToUse.length > 8) {
+      const pinLower = pin.toLowerCase();
+      const pinUpper = pin.toUpperCase();
+      const clusters = [
+        `https://sgp1.blynk.cloud/external/api/update?token=${tokenToUse}&${pinLower}=${value}`,
+        `https://blynk.cloud/external/api/update?token=${tokenToUse}&${pinLower}=${value}`,
+        `https://fra1.blynk.cloud/external/api/update?token=${tokenToUse}&${pinLower}=${value}`,
+        `https://ny3.blynk.cloud/external/api/update?token=${tokenToUse}&${pinLower}=${value}`,
+        `https://blr1.blynk.cloud/external/api/update?token=${tokenToUse}&${pinLower}=${value}`,
+        `https://sgp1.blynk.cloud/external/api/update?token=${tokenToUse}&${pinUpper}=${value}`,
+        `https://blynk.cloud/external/api/update?token=${tokenToUse}&${pinUpper}=${value}`
+      ];
+
+      const results = await Promise.allSettled(
+        clusters.map(url => fetch(url, { method: 'GET' }).then(r => ({ url, status: r.status, ok: r.ok })))
+      );
+
+      const successful = results.find(r => r.status === 'fulfilled' && (r.value.ok || r.value.status === 200));
+      blynkResult = {
+        ok: !!successful,
+        details: results.map(r => r.status === 'fulfilled' ? r.value : { error: r.reason?.message })
+      };
     }
 
     // Forward to Local IP if specified

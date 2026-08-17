@@ -77,6 +77,7 @@ export const FirmwareView: React.FC<FirmwareViewProps> = ({ device, lang }) => {
   const [intervalMs, setIntervalMs] = useState(2000);
   const [lampPin, setLampPin] = useState(12);
   const [mq135Pin, setMq135Pin] = useState(14);
+  const [relayActiveLow, setRelayActiveLow] = useState(true); // Active LOW for Relay Module vs Active HIGH for LED
 
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedDefines, setCopiedDefines] = useState(false);
@@ -181,11 +182,22 @@ void sendTelegramAlert(String message) {
 }
 
 // ---------------------- 5. BLYNK VIRTUAL PIN LISTENERS -----------------------
+// V0: Smart_Lamp Relay Switch
 BLYNK_WRITE(V0) {
   int lampState = param.asInt();
-  digitalWrite(SMART_LAMP_PIN, lampState == 1 ? HIGH : LOW);
+
+  // 💡 ចំណាំសំខាន់សម្រាប់ Relay Module៖
+  // Relay Module ៩៩% លើទីផ្សារជាប្រភេទ Active LOW (LOW = បើក ON, HIGH = បិទ OFF)
+  // ប្រសិនបើជា LED ធម្មតា (HIGH = ON, LOW = OFF)
+  ${relayActiveLow ? `// កំណត់សម្រាប់ Relay Module (Active LOW)
+  digitalWrite(SMART_LAMP_PIN, lampState == 1 ? LOW : HIGH);` : `// កំណត់សម្រាប់ LED ធម្មតា (Active HIGH)
+  digitalWrite(SMART_LAMP_PIN, lampState == 1 ? HIGH : LOW);`}
+
+  // 📸 បើក Flash LED ពណ៌សនៅលើ ESP32-CAM (GPIO 4) ដំណាលគ្នាដើម្បីងាយស្រួលដឹងថា Chip ដំណើរការ
+  digitalWrite(ONBOARD_FLASH_LED, lampState == 1 ? HIGH : LOW);
+
   Serial.print("[Blynk] Smart_Lamp (GPIO ${lampPin} / V0) -> ");
-  Serial.println(lampState == 1 ? "ON" : "OFF");
+  Serial.println(lampState == 1 ? "ON (Relay ON / Flash ON)" : "OFF (Relay OFF / Flash OFF)");
 
   String statusMsg = lampState == 1 
     ? "💡 <b>[ESP32-CAM Smart_Lamp]</b> កុងតាក់ត្រូវបានបើក (ON) ✅"
@@ -236,7 +248,8 @@ void setup() {
   pinMode(MQ135_PIN, INPUT_PULLUP); // ប្រើ PULLUP ដើម្បីការពារ Signal រំខាន
   pinMode(ONBOARD_FLASH_LED, OUTPUT);
   
-  digitalWrite(SMART_LAMP_PIN, LOW);
+  // បិទ Relay ឬ LED ជាមុនពេល Boot
+  digitalWrite(SMART_LAMP_PIN, ${relayActiveLow ? 'HIGH' : 'LOW'});
   digitalWrite(ONBOARD_FLASH_LED, LOW);
 
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
@@ -493,6 +506,34 @@ void loop() {
       }
 
       // Backend / Blynk Cloud / Local IP Forwarder
+      if (remoteDispatchMode === 'local_ip' && chipTargetIp) {
+        // Direct browser-to-chip local HTTP call (bypasses cloud NAT and HTTPS mixed-content blocks)
+        try {
+          const actionPath = value === 1 ? 'on' : 'off';
+          const targetUrl = `http://${chipTargetIp}/${actionPath}?t=${Date.now()}`;
+
+          // 1. Image Beacon (bypasses standard fetch CORS)
+          const beacon = new Image();
+          beacon.src = targetUrl;
+
+          // 2. Hidden Iframe Dispatch
+          let hiddenIframe = document.getElementById('esp_hidden_sender') as HTMLIFrameElement;
+          if (!hiddenIframe) {
+            hiddenIframe = document.createElement('iframe');
+            hiddenIframe.id = 'esp_hidden_sender';
+            hiddenIframe.style.display = 'none';
+            document.body.appendChild(hiddenIframe);
+          }
+          hiddenIframe.src = targetUrl;
+
+          // 3. Background fetch attempt
+          fetch(`http://${chipTargetIp}/control?pin=${pin.toLowerCase()}&val=${value}`, { mode: 'no-cors' }).catch(() => {});
+          fetch(`http://${chipTargetIp}/api/update?${pin.toLowerCase()}=${value}`, { mode: 'no-cors' }).catch(() => {});
+        } catch (e) {
+          console.error("Local direct dispatch error:", e);
+        }
+      }
+
       const response = await fetch('/api/iot/chip/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -818,9 +859,121 @@ void loop() {
           </div>
         </div>
 
+        {/* Relay Module Trigger Logic Selector */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+          <div className="flex items-center gap-2">
+            <Sliders className="w-4 h-4 text-amber-400" />
+            <div>
+              <span className="text-xs font-bold text-white block">
+                {lang === 'km' ? 'ប្រភេទ Relay Module (Trigger Logic):' : 'Relay Module Trigger Mode:'}
+              </span>
+              <span className="text-[11px] text-slate-400">
+                {lang === 'km'
+                  ? '៩៩% នៃ Relay Module លើទីផ្សារជាប្រភេទ Active LOW (បញ្ជូន LOW ដើម្បីបើក)'
+                  : 'Almost all 5V/3.3V Relay modules for Arduino/ESP32 are Active LOW.'}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 p-1 bg-slate-900 rounded-lg border border-slate-700 self-start sm:self-auto">
+            <button
+              onClick={() => {
+                setRelayActiveLow(true);
+                setCustomCode((prev) =>
+                  prev.replace(/digitalWrite\(SMART_LAMP_PIN,\s*lampState\s*==\s*1\s*\?\s*HIGH\s*:\s*LOW\);/, 'digitalWrite(SMART_LAMP_PIN, lampState == 1 ? LOW : HIGH);')
+                );
+              }}
+              className={`px-2.5 py-1 rounded text-xs font-bold transition ${
+                relayActiveLow ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Active LOW (Relay Module) ⚡
+            </button>
+            <button
+              onClick={() => {
+                setRelayActiveLow(false);
+                setCustomCode((prev) =>
+                  prev.replace(/digitalWrite\(SMART_LAMP_PIN,\s*lampState\s*==\s*1\s*\?\s*LOW\s*:\s*HIGH\);/, 'digitalWrite(SMART_LAMP_PIN, lampState == 1 ? HIGH : LOW);')
+                );
+              }}
+              className={`px-2.5 py-1 rounded text-xs font-bold transition ${
+                !relayActiveLow ? 'bg-emerald-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Active HIGH (Direct LED) 💡
+            </button>
+          </div>
+        </div>
+
         {/* Live Code Preview snippet */}
         <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs text-slate-300 relative select-all overflow-x-auto">
           <pre className="text-emerald-400 font-bold">{blynkHeaderSnippet}</pre>
+        </div>
+      </div>
+
+      {/* ⚠️ PROMINENT HARDWARE TROUBLESHOOTING & RELAY GUIDE */}
+      <div className="bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-950 border-2 border-amber-500/50 rounded-2xl p-5 shadow-2xl space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+            <AlertTriangle className="w-5 h-5" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm sm:text-base font-extrabold text-amber-300 flex items-center gap-2">
+              <span>{lang === 'km' ? '🔧 ហេតុអ្វី Telegram ផ្ញើសារថាបើក តែអំពូលពិត (Relay/LED) មិនទាន់ភ្លឺ?' : '🔧 Why Telegram alerts ON but Physical Lamp / Relay is not lighting up?'}</span>
+            </h3>
+            <p className="text-xs text-slate-300 mt-1">
+              {lang === 'km'
+                ? 'នៅពេល Telegram ផ្ញើសារបាន នោះបញ្ជាក់ថា Chip ESP32 ទទួលបានបញ្ជាពី Cloud រួចរាល់ ១០០% ហើយ! មូលហេតុចម្បងដែលអំពូលពិតមិនភ្លឺ គឺបណ្ដាលមកពី ៣ ចំណុចខាងក្រោម៖'
+                : 'Since Telegram successfully sent the alert, it proves the ESP32 received the command! The hardware not turning on is caused by one of these 3 reasons:'}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs pt-1">
+          {/* Reason 1 */}
+          <div className="p-3.5 bg-slate-950/80 rounded-xl border border-amber-500/30 space-y-2">
+            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold font-mono">
+              មូលហេតុ #១ (៩៥% ជួបញឹកញាប់)
+            </span>
+            <h4 className="font-bold text-white text-xs">Relay Module ជាប្រភេទ Active LOW</h4>
+            <p className="text-slate-400 text-[11px] leading-relaxed">
+              Relay module ភាគច្រើន ត្រូវបញ្ជូនសញ្ញា <strong>LOW (0)</strong> ទើបវាទាញបើក Relay (Click សំឡេងតាក់) ហើយបញ្ជូន <strong>HIGH (1)</strong> ដើម្បីបិទ។
+            </p>
+            <div className="p-2 bg-slate-900 rounded font-mono text-[10px] text-amber-400 border border-slate-800">
+              digitalWrite(12, LOW); // បើក Relay
+            </div>
+          </div>
+
+          {/* Reason 2 */}
+          <div className="p-3.5 bg-slate-950/80 rounded-xl border border-cyan-500/30 space-y-2">
+            <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-bold font-mono">
+              មូលហេតុ #២ (ការតខ្សែ VCC/GND/IN)
+            </span>
+            <h4 className="font-bold text-white text-xs">តខ្សែជើង Relay Module</h4>
+            <p className="text-slate-400 text-[11px] leading-relaxed">
+              • ជើង <strong>VCC</strong> របស់ Relay ត្រូវតទៅ <strong>5V</strong> របស់ ESP32-CAM<br/>
+              • ជើង <strong>GND</strong> តទៅ <strong>GND</strong><br/>
+              • ជើង <strong>IN</strong> តទៅ <strong>GPIO 12</strong> (ឬ 13, 2, 14)<br/>
+              • ខ្សែអំពូលភ្លើងត្រូវកាត់តភ្ជាប់រវាង <strong>COM</strong> និង <strong>NO</strong> (Normally Open)។
+            </p>
+          </div>
+
+          {/* Reason 3 */}
+          <div className="p-3.5 bg-slate-950/80 rounded-xl border border-emerald-500/30 space-y-2">
+            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold font-mono">
+              តេស្ត Flash LED Onboard
+            </span>
+            <h4 className="font-bold text-white text-xs">Flash LED (GPIO 4) លើ ESP32-CAM</h4>
+            <p className="text-slate-400 text-[11px] leading-relaxed">
+              យើងបានបន្ថែមឲ្យកូដបើក <strong>Flash LED ពណ៌ស (GPIO 4)</strong> នៅលើ ESP32-CAM ផ្ទាល់ដំណាលគ្នា។ នៅពេលអ្នកចុចបើក V0 ភ្លើង Flash លើបន្ទះ Chip នឹងភ្លឺច្បាស់ភ្លាមៗ!
+            </p>
+            <button
+              onClick={() => dispatchChipCommand('V0', 1)}
+              className="w-full py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg transition text-[11px]"
+            >
+              តេស្តចុចបើក V0 ឥឡូវនេះ 💡
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1090,11 +1243,55 @@ void loop() {
                   <span className="text-[11px] text-slate-400 font-mono">:80</span>
                 </div>
               </div>
-              <p className="text-slate-300 text-[11px]">
-                {lang === 'km'
-                  ? 'បញ្ជាផ្ទាល់ក្នុងបណ្តាញ Wi-Fi ក្នុងផ្ទះ (Sub-10ms Latency) ដោយមិនចាំបាច់ឆ្លងកាត់ Cloud Server'
-                  : 'Direct local webhook execution (sub-10ms latency) without requiring internet or third-party servers.'}
-              </p>
+              <div className="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-cyan-500/20">
+                <p className="text-slate-300 text-[11px]">
+                  {lang === 'km'
+                    ? 'បញ្ជាផ្ទាល់ក្នុងបណ្តាញ Wi-Fi ក្នុងផ្ទះ (Sub-10ms Latency) ដោយមិនចាំបាច់ឆ្លងកាត់ Cloud Server'
+                    : 'Direct local webhook execution (sub-10ms latency) without requiring internet or third-party servers.'}
+                </p>
+                {chipTargetIp && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const ifr = (document.getElementById('esp_hidden_sender') as HTMLIFrameElement) || document.createElement('iframe');
+                        ifr.id = 'esp_hidden_sender';
+                        ifr.style.display = 'none';
+                        document.body.appendChild(ifr);
+                        ifr.src = `http://${chipTargetIp}/on?t=${Date.now()}`;
+                        setRemoteLampState(1);
+                        setRemoteStatusMessage('💡 បានបញ្ជូនទៅ IP បើក (ON) ជោគជ័យ!');
+                      }}
+                      className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1 shadow-md shadow-emerald-500/20"
+                    >
+                      💡 ចុចបើកភ្លាម (LAN ON)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const ifr = (document.getElementById('esp_hidden_sender') as HTMLIFrameElement) || document.createElement('iframe');
+                        ifr.id = 'esp_hidden_sender';
+                        ifr.style.display = 'none';
+                        document.body.appendChild(ifr);
+                        ifr.src = `http://${chipTargetIp}/off?t=${Date.now()}`;
+                        setRemoteLampState(0);
+                        setRemoteStatusMessage('⭕ បានបញ្ជូនទៅ IP បិទ (OFF) ជោគជ័យ!');
+                      }}
+                      className="px-3 py-1.5 bg-rose-500 hover:bg-rose-400 text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow-md shadow-rose-500/20"
+                    >
+                      ⭕ ចុចបិទភ្លាម (LAN OFF)
+                    </button>
+                    <a
+                      href={`http://${chipTargetIp}/on`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded text-[10px]"
+                    >
+                      បើក New Tab
+                    </a>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
