@@ -854,6 +854,30 @@ export const INITIAL_DEVICES: IoTDevice[] = [
       },
       V4: {
         pin: 'V4',
+        label: 'MQ-135 Air Quality PPM',
+        labelKhmer: 'កំហាប់ខ្យល់ពុល MQ-135 (PPM)',
+        type: 'sensor_gas',
+        unit: 'PPM',
+        min: 100,
+        max: 1000,
+        value: 285,
+        gpioPin: 0,
+        color: '#f97316',
+        iconName: 'Wind'
+      },
+      V5: {
+        pin: 'V5',
+        label: 'Air Quality Status',
+        labelKhmer: 'ស្ថានភាពគុណភាពខ្យល់ (Normal / Bad)',
+        type: 'generic',
+        min: 0,
+        max: 1,
+        value: 0,
+        color: '#10b981',
+        iconName: 'ShieldAlert'
+      },
+      V6: {
+        pin: 'V6',
         label: 'Telegram Alert Sent',
         labelKhmer: 'ស្ថានភាពផ្ញើសារ Telegram',
         type: 'generic',
@@ -864,30 +888,6 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         gpioPin: 0,
         color: '#0ea5e9',
         iconName: 'Send'
-      },
-      V5: {
-        pin: 'V5',
-        label: 'AP Hotspot SSID',
-        labelKhmer: 'ឈ្មោះ Wi-Fi AP (Hotspot)',
-        type: 'generic',
-        min: 0,
-        max: 100,
-        value: 1,
-        color: '#6366f1',
-        iconName: 'Wifi'
-      },
-      V6: {
-        pin: 'V6',
-        label: 'Full Bin Alert Count',
-        labelKhmer: 'ចំនួនលើកសំរាមពេញ',
-        type: 'counter',
-        unit: 'times',
-        min: 0,
-        max: 100,
-        value: 2,
-        gpioPin: 0,
-        color: '#ef4444',
-        iconName: 'Bell'
       },
       V7: {
         pin: 'V7',

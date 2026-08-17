@@ -203,7 +203,7 @@ setInterval(() => {
       }
     }
 
-    // 6. ESP32-C3 Smart Bin & Dual Switch simulation
+    // 6. ESP32-C3 Smart Bin & Dual Switch & MQ-135 Air Quality simulation
     if (dev.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL') {
       if (dev.pins.V1) {
         let dist = Number(dev.pins.V1.value);
@@ -221,26 +221,57 @@ setInterval(() => {
           dev.pins.V0.value = pct;
         }
 
-        if (pct >= 100 && dev.pins.V4 && Number(dev.pins.V4.value) === 0) {
-          dev.pins.V4.value = 1;
+        if (pct >= 100 && dev.pins.V6 && Number(dev.pins.V6.value) === 0) {
+          dev.pins.V6.value = 1;
           const logMsg: DeviceLog = {
-            id: `tg_${Date.now()}`,
+            id: `tg_bin_${Date.now()}`,
             timestamp: new Date().toLocaleTimeString(),
             level: 'WARN',
             deviceId: dev.id,
-            message: '[TELEGRAM ALERT] សូមមកប្រមូលសម្រាមជាបន្ទាន់ សម្រាមពេញហើយ!!! (100% Full)',
-            messageKhmer: 'ផ្ញើសារ Telegram: សូមមកប្រមូលសម្រាមជាបន្ទាន់ សម្រាមពេញហើយ!!! (កម្រិត ១០០%)',
+            message: '[TELEGRAM ALERT] សូមមកប្រមូលសម្រាមជាបន្ទាន់! សម្រាមពេញហើយ!!! (100% Full)',
+            messageKhmer: 'ផ្ញើសារ Telegram: សូមមកប្រមូលសម្រាមជាបន្ទាន់! សម្រាមពេញហើយ!!! (កម្រិត ១០០%)',
             source: 'TELEGRAM_BOT'
           };
           logs.unshift(logMsg);
           broadcastSSE('log_added', logMsg);
-        } else if (pct < 80 && dev.pins.V4) {
-          dev.pins.V4.value = 0;
+        } else if (pct < 80 && dev.pins.V6) {
+          dev.pins.V6.value = 0;
+        }
+      }
+
+      // MQ-135 Gas / Air Quality PPM (GPIO 0 / V4)
+      if (dev.pins.V4) {
+        let ppm = Number(dev.pins.V4.value || 285);
+        ppm += (Math.random() - 0.48) * 8;
+        ppm = Math.round(Math.max(120, Math.min(850, ppm)));
+        dev.pins.V4.value = ppm;
+
+        const airBad = ppm >= 400;
+        if (dev.pins.V5) {
+          dev.pins.V5.value = airBad ? 1 : 0;
+        }
+
+        // Air Pollution Telegram Alert
+        if (airBad && (!dev.pins.V6 || Number(dev.pins.V6.value) === 0)) {
+          const logMsg: DeviceLog = {
+            id: `tg_air_${Date.now()}`,
+            timestamp: new Date().toLocaleTimeString(),
+            level: 'ERROR',
+            deviceId: dev.id,
+            message: `[TELEGRAM ALERT] ⚠️ អាសន្ន! មានខ្យល់ពុលខ្លាំង (${ppm} PPM) - សូមប្រុងប្រយ័ត្នចេញក្រៅសូមពាក់ម៉ាស តែបើមិនចាំបាច់សូមនៅក្នុងផ្ទះ ឬកន្លែងដែលមានបរិយាសកាសល្អ!!!`,
+            messageKhmer: `ផ្ញើសារ Telegram: ⚠️ អាសន្ន! មានខ្យល់ពុលខ្លាំង (${ppm} PPM) - សូមប្រុងប្រយ័ត្នចេញក្រៅសូមពាក់ម៉ាស!`,
+            source: 'TELEGRAM_BOT'
+          };
+          logs.unshift(logMsg);
+          broadcastSSE('log_added', logMsg);
         }
       }
     }
 
     evaluateAutomations(dev);
+
+    // Real-time SSE update for this specific device
+    broadcastSSE('device_updated', { deviceId: dev.id, device: dev });
   });
 
   const primaryDev = devices[0];
@@ -265,7 +296,7 @@ setInterval(() => {
 
     broadcastSSE('telemetry_tick', { point: newPoint, deviceId: primaryDev.id, pins: primaryDev.pins });
   }
-}, 2000);
+}, 500);
 
 async function startServer() {
   const app = express();
@@ -696,12 +727,19 @@ async function startServer() {
     });
   });
 
-  // Direct ESP32-C3 Smart Bin & Dual Switch Endpoints (Exact Match to User Code)
+  // Direct ESP32-C3 Smart Bin & Dual Switch & MQ-135 Endpoints (Exact Match to User Code)
   app.get('/data', (_req: Request, res: Response) => {
     const c3Dev = devices.find(d => d.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL') || devices[0];
     const dist = Number(c3Dev?.pins.V1?.value || 12.5);
     const level = Number(c3Dev?.pins.V0?.value || 45);
-    res.json({ distance: dist, level: Math.round(level) });
+    const ppm = Number(c3Dev?.pins.V4?.value || 285);
+    const airBad = ppm >= 400;
+    res.json({
+      distance: Number(dist.toFixed(1)),
+      level: Math.round(level),
+      ppm: Math.round(ppm),
+      airBad: airBad
+    });
   });
 
   app.get('/led1/on', (_req: Request, res: Response) => {

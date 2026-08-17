@@ -1106,13 +1106,14 @@ void loop() {
 }
 `;
 
-  // 7. Device 6: ESP32-C3 Smart Bin & Dual Golden Wall Switch (Exact Match to User Code)
+  // 7. Device 6: ESP32-C3 Smart Bin & MQ-135 Air Quality & Dual Wall Switch (Exact Match to User Code)
   const esp32C3SmartBinDualCode = `/*
  * ==============================================================================
- * Project: ESP32-C3 Smart Bin & Dual Golden Rocker Wall Switch (SGT)
+ * Project: ESP32-C3 Smart System: Smart Bin + MQ-135 Air Quality + Dual Wall Switch
  * Hardware: ESP32-C3 SuperMini / Mini (RISC-V)
  * Wi-Fi: AP ("SmartBin-ESP32" 192.168.4.1) + STA ("${wifiSsid}")
  * Ultrasonic HC-SR04: TRIG (GPIO 2), ECHO (GPIO 3) -> 20cm=0%, 5cm=100%
+ * Air Quality Sensor MQ-135: GPIO 0 (Analog ADC) -> Air Bad >= 400 PPM
  * Dual Golden Wall Switch: LED1 / Switch 1 (GPIO 8), LED2 / Switch 2 (GPIO 9)
  * Telegram Alerts: Bot "${telegramBotToken}" -> Chat ID "${telegramChatId}"
  * ==============================================================================
@@ -1123,17 +1124,21 @@ void loop() {
 #include <DNSServer.h>
 #include <HTTPClient.h>
 
-// Define ESP32-C3 Pins
+// Pin Definitions
 #define TRIG_PIN 2
 #define ECHO_PIN 3
 #define LED1_PIN 8
 #define LED2_PIN 9
+#define MQ135_PIN 0  // GPIO 0 សម្រាប់វាស់ MQ-135 Analog
 
 // Bin Dimensions (in cm)
-const float EMPTY_DISTANCE = 20.0; // 20cm = 0% Full
-const float FULL_DISTANCE  = 5.0;  // 5cm  = 100% Full
+const float EMPTY_DISTANCE = 20.0;
+const float FULL_DISTANCE  = 5.0;
 
-// 1. ESP32 Hotspot Credentials (សម្រាប់ទូរស័ព្ទភ្ជាប់ត្រង់)
+// Air Quality Threshold (កម្រិតកំណត់អតិបរមា)
+const int AIR_THRESHOLD_PPM = 400; // លើសពី 400 PPM នឹងបង្ហាញថា Air Quality: Bad
+
+// 1. ESP32 Hotspot Credentials
 const char* ap_ssid = "SmartBin-ESP32";
 const char* ap_password = "12345678";
 
@@ -1141,7 +1146,7 @@ const char* ap_password = "12345678";
 const char* wifi_ssid = "${wifiSsid}";        // ដាក់ឈ្មោះ Wi-Fi ផ្ទះ
 const char* wifi_password = "${wifiPass}"; // ដាក់លេខសម្ងាត់ Wi-Fi
 
-// Telegram Bot Credentials
+// Telegram Credentials
 const String BOT_TOKEN = "${telegramBotToken}";
 const String CHAT_ID   = "${telegramChatId}";
 
@@ -1149,14 +1154,290 @@ IPAddress local_ip(192, 168, 4, 1);
 IPAddress gateway(192, 168, 4, 1);
 IPAddress subnet(255, 255, 255, 0);
 
-WebServer server(80);
+const byte DNS_PORT = 53;
 DNSServer dnsServer;
+WebServer server(80);
 
-bool led1State = false;
-bool led2State = false;
-bool telegramSent = false; 
+bool telegramSent = false;
+bool airTelegramSent = false;
 
-// --- Function to Measure Distance via Ultrasonic ---
+// HTML Dashboard
+const char HTML_CONTENT[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart System Dashboard</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            background-color: #f4f4f4;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            user-select: none;
+            padding: 20px;
+            gap: 20px;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 100%;
+            max-width: 340px;
+        }
+        h2 { color: #333333; margin-top: 0; margin-bottom: 15px; }
+
+        /* Bin UI */
+        .bin-container {
+            width: 120px;
+            height: 160px;
+            border: 4px solid #333333;
+            border-radius: 10px;
+            margin: 15px auto;
+            position: relative;
+            background-color: #eeeeee;
+            overflow: hidden;
+            display: flex;
+            align-items: flex-end;
+        }
+        .bin-fill {
+            width: 100%;
+            height: 0%;
+            background-color: #4caf50;
+            transition: height 0.5s ease, background-color 0.5s ease;
+        }
+        .info-text { font-size: 22px; font-weight: bold; color: #222222; margin: 8px 0; }
+        .dist-text { font-size: 15px; color: #666666; }
+
+        /* Air Quality Widget UI & Semi-Circular Gauge */
+        .gauge-container {
+            position: relative;
+            width: 220px;
+            height: 130px;
+            margin: 10px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .gauge-svg { width: 100%; height: 100%; overflow: visible; }
+        .gauge-center {
+            position: absolute;
+            top: 48px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: none;
+        }
+        .ppm-value {
+            font-size: 38px;
+            font-weight: 800;
+            color: #2e7d32;
+            transition: color 0.5s ease;
+            line-height: 1;
+        }
+        .ppm-unit {
+            font-size: 11px;
+            font-weight: bold;
+            color: #888888;
+            letter-spacing: 1px;
+            margin-top: 2px;
+        }
+        .air-status {
+            font-size: 18px;
+            font-weight: bold;
+            padding: 8px 16px;
+            border-radius: 10px;
+            margin-top: 5px;
+            display: inline-block;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .status-normal { background-color: #e8f5e9; color: #2e7d32; border: 2px solid #2e7d32; }
+        .status-bad { background-color: #ffebee; color: #c62828; border: 2px solid #c62828; }
+
+        /* Switches UI */
+        .status-container { display: flex; gap: 30px; justify-content: center; margin-bottom: 15px; }
+        .status-title { font-size: 16px; font-weight: bold; color: #222222; width: 100px; }
+        .wall-panel {
+            background: linear-gradient(145deg, #e0b458, #b88a30);
+            padding: 16px;
+            border-radius: 12px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .switches-frame {
+            display: flex;
+            background-color: #1a1a1a;
+            border: 4px solid #1a1a1a;
+            border-radius: 6px;
+            gap: 4px;
+            overflow: hidden;
+        }
+        .switch-rocker {
+            width: 90px;
+            height: 180px;
+            background: linear-gradient(180deg, #c49631, #a3781f);
+            position: relative;
+            cursor: pointer;
+        }
+        .led-indicator {
+            position: absolute;
+            top: 20px;
+            left: 15px;
+            width: 45px;
+            height: 8px;
+            border-radius: 4px;
+            background-color: #2a2a2a;
+        }
+        .led-indicator.active {
+            background-color: #80ffff;
+            box-shadow: 0 0 8px #80ffff, 0 0 15px rgba(128, 255, 255, 0.8);
+        }
+        .brand-logo { margin-top: 10px; font-size: 14px; font-weight: bold; font-style: italic; color: #5c4310; letter-spacing: 2px; }
+        .labels-container { display: flex; gap: 30px; justify-content: center; margin-top: 15px; }
+        .switch-label { font-size: 16px; font-weight: 800; color: #444444; width: 100px; text-transform: uppercase; }
+    </style>
+</head>
+<body>
+
+    <!-- Widget 1: Smart Bin -->
+    <div class="card">
+        <h2>Smart Bin Level</h2>
+        <div class="bin-container">
+            <div id="fill" class="bin-fill"></div>
+        </div>
+        <div id="level" class="info-text">0%</div>
+        <div id="distance" class="dist-text">Distance: -- cm</div>
+    </div>
+
+    <!-- Widget 2: Air Quality (MQ-135 Semi-Circular Gauge) -->
+    <div class="card">
+        <h2>Air Quality Monitor</h2>
+        <div class="gauge-container">
+            <svg class="gauge-svg" viewBox="0 0 200 120">
+                <path d="M 25 100 A 75 75 0 0 1 175 100" fill="none" stroke="#e2e8f0" stroke-width="24" stroke-linecap="butt" />
+                <path id="gaugeArc" d="M 25 100 A 75 75 0 0 1 175 100" fill="none" stroke="#22c55e" stroke-width="24" stroke-linecap="butt" stroke-dasharray="235.62" stroke-dashoffset="235.62" style="transition: stroke-dashoffset 0.6s ease, stroke 0.6s ease;" />
+                <text x="25" y="118" text-anchor="middle" font-size="12" font-weight="bold" fill="#94a3b8">0</text>
+                <text x="175" y="118" text-anchor="middle" font-size="12" font-weight="bold" fill="#94a3b8">1000</text>
+            </svg>
+            <div class="gauge-center">
+                <div id="ppmDisplay" class="ppm-value">0</div>
+                <div class="ppm-unit">PPM</div>
+            </div>
+        </div>
+        <div id="airWidget" class="air-status status-normal">Air Quality: Normal</div>
+    </div>
+
+    <!-- Widget 3: Switches -->
+    <div class="card">
+        <h2>Wall Switch Control</h2>
+        <div class="status-container">
+            <div id="status1" class="status-title">Status: OFF</div>
+            <div id="status2" class="status-title">Status: OFF</div>
+        </div>
+        <div class="wall-panel">
+            <div class="switches-frame">
+                <div class="switch-rocker" onclick="toggleLED(1)">
+                    <div id="led1" class="led-indicator"></div>
+                </div>
+                <div class="switch-rocker" onclick="toggleLED(2)">
+                    <div id="led2" class="led-indicator"></div>
+                </div>
+            </div>
+            <div class="brand-logo">SGT</div>
+        </div>
+        <div class="labels-container">
+            <div id="label1" class="switch-label">SWITCH 1</div>
+            <div id="label2" class="switch-label">SWITCH 2</div>
+        </div>
+    </div>
+
+    <script>
+        function updateSensors() {
+            fetch("/data")
+                .then(response => response.json())
+                .then(data => {
+                    // Update Bin UI
+                    const fill = document.getElementById("fill");
+                    let pct = data.level;
+                    fill.style.height = pct + "%";
+                    document.getElementById("level").innerText = pct + "% Full";
+                    document.getElementById("distance").innerText = "Distance: " + data.distance + " cm";
+
+                    if (pct >= 85) fill.style.backgroundColor = "#e53935";
+                    else if (pct >= 50) fill.style.backgroundColor = "#fb8c00";
+                    else fill.style.backgroundColor = "#4caf50";
+
+                    // Update Air Quality Arc & Dynamic Color (Green -> Yellow -> Orange -> Deep Red)
+                    const ppm = data.ppm;
+                    document.getElementById("ppmDisplay").innerText = ppm;
+                    const gaugeArc = document.getElementById("gaugeArc");
+                    const arcLen = 235.62;
+                    const ratio = Math.min(1, Math.max(0, ppm / 1000));
+                    gaugeArc.style.strokeDashoffset = (arcLen * (1 - ratio));
+
+                    let color = "#22c55e";
+                    if (ppm >= 600) color = "#b91c1c";
+                    else if (ppm >= 400) color = "#dc2626";
+                    else if (ppm >= 300) color = "#f97316";
+                    else if (ppm >= 200) color = "#eab308";
+                    else if (ppm >= 100) color = "#84cc16";
+
+                    gaugeArc.style.stroke = color;
+                    document.getElementById("ppmDisplay").style.color = color;
+
+                    const airWidget = document.getElementById("airWidget");
+                    if (data.airBad) {
+                        airWidget.innerText = "Air Quality: Bad";
+                        airWidget.className = "air-status status-bad";
+                    } else {
+                        airWidget.innerText = "Air Quality: Normal";
+                        airWidget.className = "air-status status-normal";
+                    }
+                })
+                .catch(err => console.log(err));
+        }
+        setInterval(updateSensors, 300); // 300ms Ultra-Fast Real-Time refresh
+        updateSensors();
+
+        let is1On = false, is2On = false;
+        function toggleLED(num) {
+            let stateNow = (num === 1) ? is1On : is2On;
+            let endpoint = (num === 1) ? (stateNow ? "/led1/off" : "/led1/on") : (stateNow ? "/led2/off" : "/led2/on");
+
+            fetch(endpoint)
+                .then(response => response.text())
+                .then(state => {
+                    const led = document.getElementById("led" + num);
+                    const status = document.getElementById("status" + num);
+                    const label = document.getElementById("label" + num);
+
+                    if (state === "1") {
+                        led.classList.add("active");
+                        status.innerText = "Status: ON";
+                        label.innerText = "SWITCH ON";
+                        if (num === 1) is1On = true; else is2On = true;
+                    } else {
+                        led.classList.remove("active");
+                        status.innerText = "Status: OFF";
+                        label.innerText = "SWITCH OFF";
+                        if (num === 1) is1On = false; else is2On = false;
+                    }
+                });
+        }
+    </script>
+</body>
+</html>
+)rawliteral";
+
+// Measure Ultrasonic Distance
 float getDistance() {
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
@@ -1164,156 +1445,137 @@ float getDistance() {
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
 
-  long duration = pulseIn(ECHO_PIN, HIGH, 30000); // 30ms timeout
-  if (duration == 0) return 999.0;
-  return duration * 0.034 / 2.0;
+  long duration = pulseIn(ECHO_PIN, HIGH, 30000);
+  if (duration == 0) return EMPTY_DISTANCE;
+  return (duration * 0.0343) / 2.0;
 }
 
-// --- Function to Calculate Percentage ---
-int getFillLevel(float distance) {
+int calculateLevel(float distance) {
   if (distance >= EMPTY_DISTANCE) return 0;
-  if (distance <= FULL_DISTANCE)  return 100;
-  return (int)((EMPTY_DISTANCE - distance) / (EMPTY_DISTANCE - FULL_DISTANCE) * 100.0);
+  if (distance <= FULL_DISTANCE) return 100;
+  return (int)(((EMPTY_DISTANCE - distance) / (EMPTY_DISTANCE - FULL_DISTANCE)) * 100.0);
 }
 
-// --- Function to Send Telegram Alert ---
-void sendTelegram(String message) {
-  if (WiFi.status() != WL_CONNECTED) return;
-  HTTPClient http;
-  String url = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage?chat_id=" + CHAT_ID + "&text=" + message;
-  http.begin(url);
-  http.GET();
-  http.end();
+// មុខងារគណនា PPM សម្រាប់ MQ-135
+int getMQ135PPM() {
+  int rawADC = analogRead(MQ135_PIN);
+  int ppm = map(rawADC, 0, 4095, 100, 1000);
+  return ppm;
 }
 
-// --- Embedded Web UI with Live Vertical Gauge and Dual Golden Rockers ---
-const char index_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32-C3 Smart Bin & Dual Switch</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: #0f172a; color: #f8fafc; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
-        .dashboard-container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; width: 90%; max-width: 900px; }
-        .card { background-color: #1e293b; border-radius: 16px; padding: 25px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5); width: 340px; display: flex; flex-direction: column; align-items: center; border: 1px solid #334155; }
-        h2 { margin-top: 0; font-size: 1.3rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1.5px; }
-        .tank-container { width: 140px; height: 260px; border: 4px solid #475569; border-radius: 20px; position: relative; overflow: hidden; background: #0f172a; box-shadow: inset 0 0 10px rgba(0,0,0,0.8); }
-        .water-fill { position: absolute; bottom: 0; width: 100%; height: 0%; background: #10b981; transition: height 0.6s ease, background 0.6s ease; }
-        .percentage-text { position: absolute; width: 100%; top: 45%; text-align: center; font-size: 2rem; font-weight: 800; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.8); z-index: 2; }
-        .distance-info { margin-top: 15px; font-size: 1.1rem; color: #38bdf8; font-weight: bold; }
-        .switch-board { width: 100%; max-width: 320px; background: linear-gradient(145deg, #dfb76c, #99742a); padding: 15px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; box-shadow: 0 10px 20px rgba(0,0,0,0.6); }
-        .sgt-logo { font-size: 1.2rem; font-weight: 900; color: #3d2c06; letter-spacing: 2px; margin-bottom: 12px; }
-        .rocker-container { display: flex; gap: 15px; justify-content: center; width: 100%; }
-        .rocker-switch { width: 110px; height: 180px; background: linear-gradient(to bottom, #d4af37, #aa7c11); border: 2px solid #5c4308; border-radius: 12px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; padding: 12px 6px; box-sizing: border-box; cursor: pointer; user-select: none; box-shadow: 0 8px 12px rgba(0,0,0,0.4); transition: transform 0.1s; }
-        .rocker-switch:active { transform: scale(0.98); }
-        .led-indicator { width: 45px; height: 6px; background-color: #3d2c06; border-radius: 4px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.5); }
-        .power-icon { width: 28px; height: 28px; fill: #4a3507; margin-bottom: 5px; }
-        .rocker-switch.active { background: linear-gradient(to bottom, #aa7c11, #d4af37); }
-        .rocker-switch.active .led-indicator { background-color: #00f2fe; box-shadow: 0 0 12px #00f2fe, inset 0 0 2px #fff; }
-        .rocker-switch.active .power-icon { fill: #00f2fe; filter: drop-shadow(0 0 4px #00f2fe); }
-        .label { font-size: 0.85rem; font-weight: bold; color: #4a3507; margin-top: 5px; }
-    </style>
-</head>
-<body>
-    <div class="dashboard-container">
-        <div class="card">
-            <h2>Smart Bin Level</h2>
-            <div class="tank-container">
-                <div class="water-fill" id="fillBar"></div>
-                <div class="percentage-text" id="levelText">0%</div>
-            </div>
-            <div class="distance-info">Distance: <span id="distText">--</span> cm</div>
-        </div>
-        <div class="card">
-            <h2>Dual Switch Control</h2>
-            <div class="switch-board">
-                <div class="sgt-logo">SGT</div>
-                <div class="rocker-container">
-                    <div class="rocker-switch" id="btn1" onclick="toggleLED(1)">
-                        <div class="led-indicator"></div>
-                        <span class="label">SWITCH 1</span>
-                        <svg class="power-icon" viewBox="0 0 24 24"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/></svg>
-                    </div>
-                    <div class="rocker-switch" id="btn2" onclick="toggleLED(2)">
-                        <div class="led-indicator"></div>
-                        <span class="label">SWITCH 2</span>
-                        <svg class="power-icon" viewBox="0 0 24 24"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/></svg>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <script>
-        let s1 = false, s2 = false;
-        function toggleLED(btnNum) {
-            let active = (btnNum === 1) ? !s1 : !s2;
-            fetch('/led' + btnNum + '/' + (active ? 'on' : 'off'))
-                .then(r => r.text()).then(d => {
-                    if (btnNum === 1) { s1 = (d === "1"); document.getElementById('btn1').classList.toggle('active', s1); }
-                    else { s2 = (d === "1"); document.getElementById('btn2').classList.toggle('active', s2); }
-                });
-        }
-        setInterval(() => {
-            fetch('/data').then(r => r.json()).then(d => {
-                document.getElementById('distText').innerText = d.distance.toFixed(1);
-                document.getElementById('levelText').innerText = d.level + '%';
-                let bar = document.getElementById('fillBar');
-                bar.style.height = d.level + '%';
-                bar.style.background = d.level < 50 ? '#10b981' : (d.level < 85 ? '#f59e0b' : '#ef4444');
-            });
-        }, 1500);
-    </script>
-</body>
-</html>
-)rawliteral";
+// មុខងារបំប្លែងអក្សរ (Encode) សម្រាប់ Telegram API
+String urlEncode(String str) {
+  String encodedString = "";
+  char c;
+  for (unsigned int i = 0; i < str.length(); i++) {
+    c = str.charAt(i);
+    if (isalnum(c)) {
+      encodedString += c;
+    } else {
+      char code1 = (c & 0xf) + '0';
+      if ((c & 0xf) > 9) code1 = (c & 0xf) - 10 + 'A';
+      c = (c >> 4) & 0xf;
+      char code2 = c + '0';
+      if (c > 9) code2 = c - 10 + 'A';
+      encodedString += '%';
+      encodedString += code2;
+      encodedString += code1;
+    }
+  }
+  return encodedString;
+}
+
+// Telegram Alert Function
+void sendTelegramMessage(String message) {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    String encodedMessage = urlEncode(message);
+    String url = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage?chat_id=" + CHAT_ID + "&text=" + encodedMessage;
+    http.begin(url);
+    http.GET();
+    http.end();
+  }
+}
+
+void handleRoot() { server.send(200, "text/html", HTML_CONTENT); }
+
+void handleData() {
+  float dist = getDistance();
+  int level = calculateLevel(dist);
+  int ppm = getMQ135PPM();
+  bool airBad = (ppm >= AIR_THRESHOLD_PPM);
+
+  // Telegram Alert សម្រាប់សម្រាមពេញ
+  if (level >= 100 && !telegramSent) {
+    sendTelegramMessage("សូមមកប្រមូលសម្រាមជាបន្ទាន់! សម្រាមពេញហើយ!!!");
+    telegramSent = true;
+  } else if (level < 80) {
+    telegramSent = false;
+  }
+
+  // Telegram Alert សម្រាប់កម្រិតខ្យល់ពុល (អក្សរដែលអ្នកបានស្នើ)
+  if (airBad && !airTelegramSent) {
+    String msg = "⚠️ អាសន្ន! មានខ្យល់ពុលខ្លាំង (" + String(ppm) + " PPM)\\n\\n" +
+                 "សូមប្រុងប្រយ័ត្នចេញក្រៅសូមពាក់ម៉ាស តែបើមិនចាំបាច់សូមនៅក្នុងផ្ទះ ឬកន្លែងដែលមានបរិយាសកាសល្អ!!!";
+    sendTelegramMessage(msg);
+    airTelegramSent = true;
+  } else if (!airBad) {
+    airTelegramSent = false;
+  }
+
+  String json = "{\"distance\":" + String(dist, 1) + 
+                ",\"level\":" + String(level) + 
+                ",\"ppm\":" + String(ppm) + 
+                ",\"airBad\":" + String(airBad ? "true" : "false") + "}";
+  server.send(200, "application/json", json);
+}
+
+void handleLed1On()  { digitalWrite(LED1_PIN, HIGH); server.send(200, "text/plain", "1"); }
+void handleLed1Off() { digitalWrite(LED1_PIN, LOW);  server.send(200, "text/plain", "0"); }
+void handleLed2On()  { digitalWrite(LED2_PIN, HIGH); server.send(200, "text/plain", "1"); }
+void handleLed2Off() { digitalWrite(LED2_PIN, LOW);  server.send(200, "text/plain", "0"); }
+
+void handleNotFound() {
+  server.sendHeader("Location", "http://192.168.4.1/", true);
+  server.send(302, "text/plain", "");
+}
 
 void setup() {
   Serial.begin(115200);
+
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
   pinMode(LED1_PIN, OUTPUT);
   pinMode(LED2_PIN, OUTPUT);
+  pinMode(MQ135_PIN, INPUT);
+
   digitalWrite(LED1_PIN, LOW);
   digitalWrite(LED2_PIN, LOW);
 
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAPConfig(local_ip, gateway, subnet);
   WiFi.softAP(ap_ssid, ap_password);
-  dnsServer.start(53, "*", local_ip);
 
   WiFi.begin(wifi_ssid, wifi_password);
-  
-  // Wait up to 10s for Wi-Fi Router Connection
-  int retry = 0;
-  while (WiFi.status() != WL_CONNECTED && retry < 20) {
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 15) {
     delay(500);
-    retry++;
+    attempts++;
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    sendTelegram("WiFi ភ្ជាប់ជោគជ័យ! IP: " + WiFi.localIP().toString());
+    sendTelegramMessage("WiFi ភ្ជាប់ជោគជ័យ! IP: " + WiFi.localIP().toString());
   }
 
-  server.on("/", []() { server.send_P(200, "text/html", index_html); });
-  server.on("/data", []() {
-    float dist = getDistance();
-    int lvl = getFillLevel(dist);
-    String json = "{\"distance\":" + String(dist) + ",\"level\":" + String(lvl) + "}";
-    server.sendHeader("Access-Control-Allow-Origin", "*");
-    server.send(200, "application/json", json);
-  });
+  dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
 
-  server.on("/led1/on", []() { digitalWrite(LED1_PIN, HIGH); led1State = true; server.send(200, "text/plain", "1"); });
-  server.on("/led1/off", []() { digitalWrite(LED1_PIN, LOW); led1State = false; server.send(200, "text/plain", "0"); });
-  server.on("/led2/on", []() { digitalWrite(LED2_PIN, HIGH); led2State = true; server.send(200, "text/plain", "1"); });
-  server.on("/led2/off", []() { digitalWrite(LED2_PIN, LOW); led2State = false; server.send(200, "text/plain", "0"); });
-
-  server.onNotFound([]() {
-    server.sendHeader("Location", "http://192.168.4.1/", true);
-    server.send(302, "text/plain", "Redirecting to Captive Portal");
-  });
+  server.on("/", handleRoot);
+  server.on("/data", handleData);
+  server.on("/led1/on", handleLed1On);
+  server.on("/led1/off", handleLed1Off);
+  server.on("/led2/on", handleLed2On);
+  server.on("/led2/off", handleLed2Off);
+  server.onNotFound(handleNotFound);
 
   server.begin();
 }
@@ -1321,20 +1583,6 @@ void setup() {
 void loop() {
   dnsServer.processNextRequest();
   server.handleClient();
-
-  static unsigned long lastCheck = 0;
-  if (millis() - lastCheck > 2000) {
-    lastCheck = millis();
-    float dist = getDistance();
-    int lvl = getFillLevel(dist);
-
-    if (lvl >= 100 && !telegramSent) {
-      sendTelegram("សូមមកប្រមូលសម្រាមជាបន្ទាន់ សម្រាមពេញហើយ!!!");
-      telegramSent = true;
-    } else if (lvl < 80) {
-      telegramSent = false;
-    }
-  }
 }
 `;
 
@@ -1932,7 +2180,7 @@ void loop() {
                     : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                 }`}
               >
-                🗑️💡 Dev 6: ESP32-C3 Smart Bin & Dual Switch (SGT)
+                🗑️💨💡 Dev 6: ESP32-C3 Bin + MQ-135 Air + Dual Switch
               </button>
               <button
                 onClick={() => handleTemplateChange('esp32_cam_smartlamp')}
@@ -2608,20 +2856,20 @@ void loop() {
           <div className="p-4 bg-slate-950 rounded-xl border border-sky-500/20 text-xs space-y-2">
             <h4 className="font-bold text-sky-400 flex items-center gap-1.5">
               <BellRing className="w-3.5 h-3.5" />
-              <span>{lang === 'km' ? 'លក្ខខណ្ឌដែលប្រព័ន្ធផ្ញើសារទៅ Telegram:' : 'Automated Telegram Alert Triggers:'}</span>
+              <span>{lang === 'km' ? 'លក្ខខណ្ឌដែលប្រព័ន្ធផ្ញើសារទៅ Telegram (Automated Telegram Triggers):' : 'Automated Telegram Alert Triggers:'}</span>
             </h4>
             <ul className="space-y-2 text-slate-300">
               <li className="flex items-start gap-2">
+                <span className="text-rose-400 font-bold mt-0.5">⚠️</span>
+                <span><strong>MQ-135 Air Quality Bad (GPIO 0 &gt;= 400 PPM):</strong> ផ្ញើសារប្រកាសអាសន្នខ្យល់ពុល៖ <code>⚠️ អាសន្ន! មានខ្យល់ពុលខ្លាំង (PPM) - សូមប្រុងប្រយ័ត្នចេញក្រៅសូមពាក់ម៉ាស តែបើមិនចាំបាច់សូមនៅក្នុងផ្ទះ ឬកន្លែងដែលមានបរិយាសកាសល្អ!!!</code></span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-rose-400 font-bold mt-0.5">🗑️</span>
+                <span><strong>សំរាមពេញក្នុងធុង (Level &gt;= 100% / &lt;= 5cm):</strong> ផ្ញើសារប្រកាសអាសន្ន៖ <code>សូមមកប្រមូលសម្រាមជាបន្ទាន់! សម្រាមពេញហើយ!!!</code></span>
+              </li>
+              <li className="flex items-start gap-2">
                 <span className="text-emerald-400 font-bold mt-0.5">✓</span>
-                <span><strong>ពេលបើកអំពូល (V0 = ON):</strong> ផ្ញើសារស្វ័យប្រវត្ត <code>💡 អំពូលកំពុងបើក</code> ទៅកាន់ Telegram ភ្លាមៗ។</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-amber-400 font-bold mt-0.5">✓</span>
-                <span><strong>ពេលបិទអំពូល (V0 = OFF):</strong> ផ្ញើសារស្វ័យប្រវត្ត <code>⭕ អំពូលត្រូវបានបិទ</code>។</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-rose-400 font-bold mt-0.5">✓</span>
-                <span><strong>ពេល MQ-135 រកឃើញផ្សែង (Pin 14 Digital DO):</strong> ផ្ញើសារប្រកាសអាសន្នផ្សែងពុល/ឧស្ម័នគ្រោះថ្នាក់។</span>
+                <span><strong>ពេល ESP32 ភ្ជាប់ WiFi ជោគជ័យ:</strong> ផ្ញើសារ <code>WiFi ភ្ជាប់ជោគជ័យ! IP: 192.168.x.x</code>។</span>
               </li>
             </ul>
           </div>
