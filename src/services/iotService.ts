@@ -148,17 +148,39 @@ class IoTService {
       if (savedIp) {
         try {
           const actionPath = Number(value) === 1 ? 'on' : 'off';
+          
+          // Legacy mapping
           const targetUrl = `http://${savedIp}/${actionPath}?pin=${pin.toLowerCase()}&val=${value}&t=${Date.now()}`;
+          
+          // Specific mappings for Device 7 (School Lights) ESP32 code: /led1/on, /led2/off, etc.
+          let esp32PinMapping = '';
+          if (pin === 'V1') esp32PinMapping = 'led1';
+          if (pin === 'V2') esp32PinMapping = 'led2';
+          if (pin === 'V3') esp32PinMapping = 'led3';
+          
           const ifr = (document.getElementById('esp_hidden_sender') as HTMLIFrameElement) || document.createElement('iframe');
           ifr.id = 'esp_hidden_sender';
           ifr.style.display = 'none';
           if (!document.body.contains(ifr)) {
             document.body.appendChild(ifr);
           }
-          ifr.src = targetUrl;
+          
+          if (esp32PinMapping) {
+            ifr.src = `http://${savedIp}/${esp32PinMapping}/${actionPath}`;
+          } else {
+            ifr.src = targetUrl;
+          }
+          
+          // Standard / fallback triggers
           fetch(`http://${savedIp}/control?pin=${pin.toLowerCase()}&val=${value}`, { mode: 'no-cors' }).catch(() => {});
           fetch(`http://${savedIp}/set?pin=${pin.toLowerCase()}&val=${value}`, { mode: 'no-cors' }).catch(() => {});
           fetch(`http://${savedIp}/api/update?${pin.toLowerCase()}=${value}`, { mode: 'no-cors' }).catch(() => {});
+          
+          // Custom triggers mapped specifically for the provided Device 7 ESP32 Code
+          if (esp32PinMapping) {
+            fetch(`http://${savedIp}/${esp32PinMapping}/${actionPath}`, { mode: 'no-cors' }).catch(() => {});
+          }
+          
         } catch (e) {}
       }
 
