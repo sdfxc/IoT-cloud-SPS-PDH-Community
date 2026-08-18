@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 
 interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
   currentTab: NavigationTab;
   onSelectTab: (tab: NavigationTab) => void;
   lang: 'km' | 'en';
@@ -26,6 +28,8 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
+  isOpen,
+  onClose,
   currentTab,
   onSelectTab,
   lang,
@@ -101,8 +105,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   return (
-    <aside id="sidebar-navigation" className="w-64 bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between shrink-0 h-screen sticky top-0 z-40 select-none transition-colors duration-200">
-      {/* Brand Header */}
+    <>
+      {/* Backdrop Overlay - Active on all screen sizes when sidebar is open */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 transition-opacity"
+          onClick={onClose}
+        />
+      )}
+      
+      <aside 
+        id="sidebar-navigation" 
+        className={`fixed top-0 left-0 z-50 h-screen w-64 bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between shrink-0 select-none transition-transform duration-300 ease-in-out ${
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        {/* Brand Header */}
       <div>
         <div className="p-4 border-b border-slate-200 dark:border-slate-800/80 flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center shadow-md shadow-emerald-500/20 border border-emerald-400/30">
@@ -194,5 +212,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
     </aside>
+    </>
   );
 };

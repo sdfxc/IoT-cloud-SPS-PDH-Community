@@ -64,6 +64,8 @@ export default function App() {
   const [isNewDeviceModalOpen, setIsNewDeviceModalOpen] = useState(false);
   const [qrModalDevice, setQrModalDevice] = useState<IoTDevice | null>(null);
 
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
   // Initial fetch from backend REST APIs
   useEffect(() => {
     async function loadData() {
@@ -256,9 +258,11 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col md:flex-row antialiased selection:bg-emerald-500 selection:text-slate-950 transition-colors duration-200">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col antialiased selection:bg-emerald-500 selection:text-slate-950 transition-colors duration-200">
       {/* Left Sidebar */}
       <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
         currentTab={currentTab}
         onSelectTab={(tab) => {
           if (tab === 'simulator') {
@@ -266,6 +270,7 @@ export default function App() {
           } else {
             setCurrentTab(tab);
           }
+          setIsSidebarOpen(false); // Close sidebar on ALL screens after selecting
         }}
         lang={lang}
         activeDeviceCount={devices.length}
@@ -278,6 +283,7 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
         {/* Top Bar */}
         <TopNav
+          onToggleSidebar={() => setIsSidebarOpen(v => !v)}
           devices={devices}
           activeDevice={activeDevice}
           onSelectDevice={setActiveDevice}
