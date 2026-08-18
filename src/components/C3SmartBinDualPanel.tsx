@@ -51,10 +51,15 @@ export const C3SmartBinDualPanel: React.FC<C3SmartBinDualPanelProps> = ({
     const fastPoll = async () => {
       // 1. Try polling real physical ESP32 directly if available (e.g. 192.168.4.1 or home router IP)
       if (targetIp && targetIp !== '0.0.0.0') {
+        const cleanIp = targetIp.replace(/^https?:\/\//, '').replace(/\/.*$/, '').trim();
         try {
           const directController = new AbortController();
-          const dTimeout = setTimeout(() => directController.abort(), 600);
-          const directRes = await fetch(`http://${targetIp}/data`, { signal: directController.signal, mode: 'cors' });
+          const dTimeout = setTimeout(() => directController.abort(), 1200);
+          const directRes = await fetch(`http://${cleanIp}/data`, {
+            signal: directController.signal,
+            mode: 'cors',
+            headers: { 'Accept': 'application/json' }
+          });
           clearTimeout(dTimeout);
           if (directRes.ok) {
             const dData = await directRes.json();
@@ -68,7 +73,7 @@ export const C3SmartBinDualPanel: React.FC<C3SmartBinDualPanelProps> = ({
                 setLiveAirBad(Boolean(dData.airBad || dData.ppm >= 400));
               }
               // Sync back to cloud server for consistency
-              fetch(`/api/iot/update?token=${device.authToken}&v0=${dData.level}&v1=${dData.distance}&v4=${dData.ppm}&v5=${dData.airBad ? 1 : 0}`).catch(() => {});
+              fetch(`/api/iot/c3/update?distance=${dData.distance}&level=${dData.level}&ppm=${dData.ppm}&airBad=${dData.airBad ? '1' : '0'}`).catch(() => {});
               return;
             }
           }

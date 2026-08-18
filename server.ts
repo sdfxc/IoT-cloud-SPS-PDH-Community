@@ -119,6 +119,11 @@ setInterval(() => {
         water += Math.round((Math.random() - 0.5) * 2);
         dev.pins.V2.value = Math.max(5, Math.min(95, water));
       }
+      if (dev.pins.V12) {
+        let light = Number(dev.pins.V12.value);
+        light += Math.round((Math.random() - 0.5) * 20);
+        dev.pins.V12.value = Math.max(0, Math.min(2000, light));
+      }
     }
 
     // 2. Smart Bin simulation
@@ -255,6 +260,11 @@ setInterval(() => {
       }
     }
 
+    // 7. School Light Controls
+    if (dev.templateId === 'TMPL_SCHOOL_LIGHTS') {
+      // Nothing to simulate here currently, these are just relays
+    }
+
     evaluateAutomations(dev);
 
     // Real-time SSE update for this specific device
@@ -264,12 +274,23 @@ setInterval(() => {
   const primaryDev = devices[0];
   if (primaryDev) {
     const now = Date.now();
+    const alertDev = devices.find(d => d.templateId === 'TMPL_ALERT_SYSTEM');
+    const c3Dev = devices.find(d => d.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL') || devices.find(d => d.templateId === 'TMPL_SMART_LAMP_MQ135');
+    const coVal = Number(alertDev?.pins.V0?.value || 306);
+    const mq135Val = Number(c3Dev?.pins.V4?.value || c3Dev?.pins.V1?.value || 185);
+    const waterVal = Number(alertDev?.pins.V2?.value || 28);
+    const pressVal = Number(alertDev?.pins.V1?.value || 103.5);
+
     const newPoint: TelemetryPoint = {
       timestamp: now,
       timeStr: new Date(now).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      temperature: Number(devices.find(d => d.templateId === 'TMPL_SMART_IRRIGATION')?.pins.V2?.value || 28.5),
+      temperature: Number(devices.find(d => d.templateId === 'TMPL_SMART_IRRIGATION')?.pins.V2?.value || alertDev?.pins.V7?.value || 28.5),
       humidity: Number(devices.find(d => d.templateId === 'TMPL_SMART_IRRIGATION')?.pins.V6?.value || 68.0),
-      gasCo: Number(devices.find(d => d.templateId === 'TMPL_ALERT_SYSTEM')?.pins.V0?.value || 465),
+      gasCo: coVal,
+      coLevel: coVal,
+      airQualityMq135: mq135Val,
+      waterLevel: waterVal,
+      airPressure: pressVal,
       soilMoisture: Number(devices.find(d => d.templateId === 'TMPL_SMART_IRRIGATION')?.pins.V1?.value || 92),
       fanSpeed: Number(primaryDev.pins.V4?.value || 75),
       relay1: Number(primaryDev.pins.V0?.value || 1),
@@ -715,7 +736,63 @@ async function startServer() {
   });
 
   // Direct ESP32-C3 Smart Bin & Dual Switch & MQ-135 Endpoints (Exact Match to User Code)
+  // 1. Direct real-time sensor push endpoint for ESP32-C3
+  const handleC3DirectUpdate = (req: Request, res: Response) => {
+    const q = req.query as Record<string, string>;
+    const b = (req.body || {}) as Record<string, any>;
+    const c3Dev = devices.find(d => d.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL') || devices[0];
+
+    const rawDist = q.distance ?? q.dist ?? q.v1 ?? b.distance ?? b.dist ?? b.v1;
+    const rawLevel = q.level ?? q.pct ?? q.v0 ?? b.level ?? b.pct ?? b.v0;
+    const rawPpm = q.ppm ?? q.v4 ?? b.ppm ?? b.v4;
+    const rawAirBad = q.airBad ?? q.v5 ?? b.airBad ?? b.v5;
+
+    if (rawDist !== undefined && c3Dev.pins.V1) {
+      c3Dev.pins.V1.value = Number(Number(rawDist).toFixed(1));
+    }
+    if (rawLevel !== undefined && c3Dev.pins.V0) {
+      c3Dev.pins.V0.value = Math.round(Number(rawLevel));
+    } else if (rawDist !== undefined && c3Dev.pins.V0) {
+      const d = Number(rawDist);
+      let pct = 0;
+      if (d >= 20.0) pct = 0;
+      else if (d <= 5.0) pct = 100;
+      else pct = Math.round(((20.0 - d) / 15.0) * 100);
+      c3Dev.pins.V0.value = pct;
+    }
+
+    if (rawPpm !== undefined && c3Dev.pins.V4) {
+      c3Dev.pins.V4.value = Math.round(Number(rawPpm));
+    }
+    if (rawAirBad !== undefined && c3Dev.pins.V5) {
+      c3Dev.pins.V5.value = (rawAirBad === 'true' || rawAirBad === '1' || Number(rawAirBad) === 1 || Number(rawPpm) >= 400) ? 1 : 0;
+    } else if (rawPpm !== undefined && c3Dev.pins.V5) {
+      c3Dev.pins.V5.value = Number(rawPpm) >= 400 ? 1 : 0;
+    }
+
+    c3Dev.lastSeen = 'Just now (live)';
+    c3Dev.status = 'online';
+
+    // Broadcast SSE update to React UI
+    broadcastSSE('device_update', { deviceId: c3Dev.id, device: c3Dev });
+
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.json({
+      success: true,
+      distance: c3Dev.pins.V1?.value,
+      level: c3Dev.pins.V0?.value,
+      ppm: c3Dev.pins.V4?.value,
+      airBad: c3Dev.pins.V5?.value === 1,
+      timestamp: Date.now()
+    });
+  };
+
+  app.get('/api/iot/c3/update', handleC3DirectUpdate);
+  app.post('/api/iot/c3/update', handleC3DirectUpdate);
+  app.get('/update', handleC3DirectUpdate);
+
   app.get('/data', (_req: Request, res: Response) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
     const c3Dev = devices.find(d => d.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL') || devices[0];
     const dist = Number(c3Dev?.pins.V1?.value ?? 12.5);
     let level = Number(c3Dev?.pins.V0?.value);
@@ -725,7 +802,7 @@ async function startServer() {
       else level = Math.round(((20.0 - dist) / 15.0) * 100);
     }
     const ppm = Number(c3Dev?.pins.V4?.value ?? 95);
-    const airBad = ppm >= 400;
+    const airBad = ppm >= 400 || Number(c3Dev?.pins.V5?.value ?? 0) === 1;
     res.json({
       distance: Number(dist.toFixed(1)),
       level: Math.round(level),

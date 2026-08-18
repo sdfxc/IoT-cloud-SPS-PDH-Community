@@ -70,9 +70,14 @@ export interface IoTDevice {
 export interface TelemetryPoint {
   timestamp: number;
   timeStr: string;
-  temperature: number; // V0
-  humidity: number;    // V1
-  gasCo: number;       // V5
+  temperature: number; // V0 / V7
+  humidity: number;    // V1 / V6
+  gasCo: number;       // V0 CO Level / Smoke
+  coLevel?: number;    // CO Level (V0)
+  airQualityMq135?: number; // MQ-135 Air Quality / NH3 / CO2 / Alcohol (ppm)
+  waterLevel?: number; // Water Level % (V2)
+  airPressure?: number;// Air Pressure kPa (V1)
+  ambientLight?: number; // BH1750 Ambient Light (V12)
   soilMoisture: number;// V7
   fanSpeed: number;    // V4
   relay1: number;      // V2

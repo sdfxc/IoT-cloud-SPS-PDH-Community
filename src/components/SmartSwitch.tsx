@@ -94,8 +94,8 @@ export const SmartSwitch: React.FC<SmartSwitchProps> = ({
           activeBorder: 'border-amber-400',
           activeText: 'text-amber-500 dark:text-amber-400',
           icon: <Lightbulb className={`w-5 h-5 transition-transform duration-300 ${isOn ? 'text-amber-400 scale-110' : 'text-slate-400 dark:text-slate-500'}`} />,
-          labelOn: lang === 'km' ? 'ភ្លើងបើក (ON)' : 'Light ON',
-          labelOff: lang === 'km' ? 'ភ្លើងបិទ (OFF)' : 'Light OFF',
+          labelOn: lang === 'km' ? 'បើក (ON)' : 'ON',
+          labelOff: lang === 'km' ? 'បិទ (OFF)' : 'OFF',
         };
       case 'pump':
         return {
@@ -104,8 +104,8 @@ export const SmartSwitch: React.FC<SmartSwitchProps> = ({
           activeBorder: 'border-emerald-400',
           activeText: 'text-emerald-500 dark:text-emerald-400',
           icon: <Droplets className={`w-5 h-5 transition-transform duration-300 ${isOn ? 'text-emerald-400 animate-bounce' : 'text-slate-400 dark:text-slate-500'}`} />,
-          labelOn: lang === 'km' ? 'ម៉ូទ័រកំពុងបូម (ON)' : 'Pump Running',
-          labelOff: lang === 'km' ? 'ម៉ូទ័រផ្អាក (OFF)' : 'Pump Idle',
+          labelOn: lang === 'km' ? 'បើក (ON)' : 'ON',
+          labelOff: lang === 'km' ? 'បិទ (OFF)' : 'OFF',
         };
       case 'siren':
         return {
@@ -114,8 +114,8 @@ export const SmartSwitch: React.FC<SmartSwitchProps> = ({
           activeBorder: 'border-red-400',
           activeText: 'text-red-500 dark:text-red-400',
           icon: <Bell className={`w-5 h-5 transition-transform duration-300 ${isOn ? 'text-red-400 animate-pulse' : 'text-slate-400 dark:text-slate-500'}`} />,
-          labelOn: lang === 'km' ? 'ប្រកាសអាសន្ន (ALERT)' : 'Siren ACTIVE',
-          labelOff: lang === 'km' ? 'ធម្មតា (STANDBY)' : 'Siren Quiet',
+          labelOn: lang === 'km' ? 'បើក (ON)' : 'ON',
+          labelOff: lang === 'km' ? 'បិទ (OFF)' : 'OFF',
         };
       case 'fan':
         return {
@@ -124,8 +124,8 @@ export const SmartSwitch: React.FC<SmartSwitchProps> = ({
           activeBorder: 'border-cyan-400',
           activeText: 'text-cyan-500 dark:text-cyan-400',
           icon: <Fan className={`w-5 h-5 transition-transform duration-300 ${isOn ? 'text-cyan-400 animate-spin' : 'text-slate-400 dark:text-slate-500'}`} />,
-          labelOn: lang === 'km' ? 'កង្ហារដំណើរការ (ON)' : 'Fan Active',
-          labelOff: lang === 'km' ? 'កង្ហារបិទ (OFF)' : 'Fan Off',
+          labelOn: lang === 'km' ? 'បើក (ON)' : 'ON',
+          labelOff: lang === 'km' ? 'បិទ (OFF)' : 'OFF',
         };
       case 'telegram':
         return {
@@ -134,8 +134,8 @@ export const SmartSwitch: React.FC<SmartSwitchProps> = ({
           activeBorder: 'border-sky-400',
           activeText: 'text-sky-500 dark:text-sky-400',
           icon: <Send className={`w-5 h-5 transition-transform duration-300 ${isOn ? 'text-sky-400' : 'text-slate-400 dark:text-slate-500'}`} />,
-          labelOn: lang === 'km' ? 'Telegram ភ្ជាប់ (ON)' : 'Telegram ON',
-          labelOff: lang === 'km' ? 'Telegram បិទ (OFF)' : 'Telegram OFF',
+          labelOn: lang === 'km' ? 'បើក (ON)' : 'ON',
+          labelOff: lang === 'km' ? 'បិទ (OFF)' : 'OFF',
         };
       case 'email':
         return {
@@ -144,8 +144,8 @@ export const SmartSwitch: React.FC<SmartSwitchProps> = ({
           activeBorder: 'border-amber-400',
           activeText: 'text-amber-500 dark:text-amber-400',
           icon: <Mail className={`w-5 h-5 transition-transform duration-300 ${isOn ? 'text-amber-400' : 'text-slate-400 dark:text-slate-500'}`} />,
-          labelOn: lang === 'km' ? 'អ៊ីមែលបើក (ON)' : 'Email Active',
-          labelOff: lang === 'km' ? 'អ៊ីមែលបិទ (OFF)' : 'Email Muted',
+          labelOn: lang === 'km' ? 'បើក (ON)' : 'ON',
+          labelOff: lang === 'km' ? 'បិទ (OFF)' : 'OFF',
         };
       case 'call':
         return {
@@ -154,8 +154,8 @@ export const SmartSwitch: React.FC<SmartSwitchProps> = ({
           activeBorder: 'border-emerald-400',
           activeText: 'text-emerald-500 dark:text-emerald-400',
           icon: <Phone className={`w-5 h-5 transition-transform duration-300 ${isOn ? 'text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`} />,
-          labelOn: lang === 'km' ? 'ទូរស័ព្ទភ្ជាប់ (ON)' : 'VoIP Active',
-          labelOff: lang === 'km' ? 'ទូរស័ព្ទបិទ (OFF)' : 'VoIP Muted',
+          labelOn: lang === 'km' ? 'បើក (ON)' : 'ON',
+          labelOff: lang === 'km' ? 'បិទ (OFF)' : 'OFF',
         };
       case 'auto':
         return {

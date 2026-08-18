@@ -1497,9 +1497,15 @@ void sendTelegramMessage(String message) {
   }
 }
 
-void handleRoot() { server.send(200, "text/html", HTML_CONTENT); }
+void handleRoot() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.send(200, "text/html", HTML_CONTENT);
+}
 
 void handleData() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "*");
   float dist = getDistance();
   int level = calculateLevel(dist);
   int ppm = getMQ135PPM();
@@ -1583,7 +1589,7 @@ void setup() {
 // Forward real readings to Web Cloud Dashboard if connected to Wi-Fi
 unsigned long lastCloudPush = 0;
 void pushDataToCloud() {
-  if (WiFi.status() == WL_CONNECTED && millis() - lastCloudPush > 1000) {
+  if (WiFi.status() == WL_CONNECTED && millis() - lastCloudPush > 800) {
     lastCloudPush = millis();
     HTTPClient http;
     float dist = getDistance();
@@ -1591,10 +1597,10 @@ void pushDataToCloud() {
     int ppm = getMQ135PPM();
     bool airBad = (ppm >= AIR_THRESHOLD_PPM);
 
-    // Send HTTP GET to cloud backend automatically
-    String cloudUrl = "https://ais-dev-27zugh4jcphio6ahgdc4og-250832150518.asia-southeast1.run.app/api/iot/update?token=tok_c3_smartbin_dual9982&v0=" + String(level) + "&v1=" + String(dist, 1) + "&v4=" + String(ppm) + "&v5=" + String(airBad ? 1 : 0);
+    // Send HTTP GET to cloud backend automatically (Supports instant real-time sync)
+    String cloudUrl = "https://ais-dev-27zugh4jcphio6ahgdc4og-250832150518.asia-southeast1.run.app/api/iot/c3/update?distance=" + String(dist, 1) + "&level=" + String(level) + "&ppm=" + String(ppm) + "&airBad=" + String(airBad ? "1" : "0");
     http.begin(cloudUrl);
-    http.setTimeout(800);
+    http.setTimeout(1000);
     http.GET();
     http.end();
   }

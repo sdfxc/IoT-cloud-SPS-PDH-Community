@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { TelemetryPoint, TimeFilter } from '../types';
 import { Activity, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface TelemetryChartProps {
   data: TelemetryPoint[];
@@ -9,7 +10,7 @@ interface TelemetryChartProps {
   lang: 'km' | 'en';
 }
 
-type SensorKey = 'temperature' | 'humidity' | 'gasCo' | 'soilMoisture';
+type SensorKey = 'temperature' | 'humidity' | 'gasCo' | 'airQualityMq135' | 'waterLevel' | 'airPressure' | 'soilMoisture' | 'ambientLight';
 
 interface SensorConfig {
   key: SensorKey;
@@ -22,10 +23,14 @@ interface SensorConfig {
 }
 
 const SENSORS: SensorConfig[] = [
-  { key: 'temperature', label: 'Temp (V0)', labelKhmer: 'សីតុណ្ហភាព', unit: '°C', color: '#f97316', minDomain: 15, maxDomain: 45 },
-  { key: 'humidity', label: 'Humidity (V1)', labelKhmer: 'សំណើម', unit: '%', color: '#06b6d4', minDomain: 20, maxDomain: 100 },
-  { key: 'gasCo', label: 'CO / Gas (V5)', labelKhmer: 'ផ្សែង/ឧស្ម័ន', unit: 'ppm', color: '#a855f7', minDomain: 100, maxDomain: 800 },
-  { key: 'soilMoisture', label: 'Soil Moist (V7)', labelKhmer: 'សំណើមដី', unit: '%', color: '#10b981', minDomain: 10, maxDomain: 90 },
+  { key: 'gasCo', label: 'CO Gas (V0)', labelKhmer: 'ឧស្ម័នពុល CO', unit: 'ppm', color: '#ef4444', minDomain: 0, maxDomain: 500 },
+  { key: 'airQualityMq135', label: 'MQ135 Gas (NH3/CO2)', labelKhmer: 'ផ្សែង/ឧស្ម័ន (MQ135)', unit: 'ppm', color: '#a855f7', minDomain: 50, maxDomain: 800 },
+  { key: 'waterLevel', label: 'Water Level (V2)', labelKhmer: 'កម្រិតនីវ៉ូទឹក', unit: '%', color: '#0ea5e9', minDomain: 0, maxDomain: 100 },
+  { key: 'airPressure', label: 'Air Pressure (V1)', labelKhmer: 'សម្ពាធបរិយាកាស', unit: 'kPa', color: '#10b981', minDomain: 90, maxDomain: 120 },
+  { key: 'ambientLight', label: 'Light (BH1750)', labelKhmer: 'ពន្លឺ (BH1750)', unit: 'lx', color: '#facc15', minDomain: 0, maxDomain: 2000 },
+  { key: 'temperature', label: 'Temp', labelKhmer: 'សីតុណ្ហភាព', unit: '°C', color: '#f97316', minDomain: 15, maxDomain: 45 },
+  { key: 'humidity', label: 'Humidity', labelKhmer: 'សំណើម', unit: '%', color: '#06b6d4', minDomain: 20, maxDomain: 100 },
+  { key: 'soilMoisture', label: 'Soil Moist', labelKhmer: 'សំណើមដី', unit: '%', color: '#84cc16', minDomain: 10, maxDomain: 90 },
 ];
 
 export const TelemetryChart: React.FC<TelemetryChartProps> = ({
@@ -35,10 +40,14 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
   lang
 }) => {
   const [activeSensors, setActiveSensors] = useState<Record<SensorKey, boolean>>({
-    temperature: true,
-    humidity: true,
-    gasCo: false,
-    soilMoisture: true,
+    gasCo: true,
+    airQualityMq135: true,
+    waterLevel: true,
+    airPressure: true,
+    ambientLight: false,
+    temperature: false,
+    humidity: false,
+    soilMoisture: false,
   });
 
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -65,17 +74,23 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
 
   // Compute stats
   const stats = useMemo(() => {
-    if (points.length === 0) return { tempAvg: 0, tempMin: 0, tempMax: 0, humAvg: 0, gasAvg: 0 };
+    if (points.length === 0) return { coAvg: 0, coMin: 0, coMax: 0, mqAvg: 0, waterAvg: 0, pressAvg: 0, tempAvg: 0, humAvg: 0 };
+    const coVals = points.map(p => p.coLevel ?? p.gasCo ?? 306);
+    const mqVals = points.map(p => p.airQualityMq135 ?? p.gasCo ?? 185);
+    const waterVals = points.map(p => p.waterLevel ?? 28);
+    const pressVals = points.map(p => p.airPressure ?? 103.5);
     const temps = points.map(p => p.temperature);
     const hums = points.map(p => p.humidity);
-    const gases = points.map(p => p.gasCo);
 
     return {
+      coAvg: Math.round(coVals.reduce((a, b) => a + b, 0) / coVals.length),
+      coMin: Math.min(...coVals),
+      coMax: Math.max(...coVals),
+      mqAvg: Math.round(mqVals.reduce((a, b) => a + b, 0) / mqVals.length),
+      waterAvg: Math.round(waterVals.reduce((a, b) => a + b, 0) / waterVals.length),
+      pressAvg: (pressVals.reduce((a, b) => a + b, 0) / pressVals.length).toFixed(1),
       tempAvg: (temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1),
-      tempMin: Math.min(...temps).toFixed(1),
-      tempMax: Math.max(...temps).toFixed(1),
       humAvg: (hums.reduce((a, b) => a + b, 0) / hums.length).toFixed(1),
-      gasAvg: Math.round(gases.reduce((a, b) => a + b, 0) / gases.length),
     };
   }, [points]);
 
@@ -86,7 +101,14 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
 
     const coords = points.map((p, idx) => {
       const x = padding.left + (idx / (points.length - 1)) * usableWidth;
-      const val = p[sensorKey];
+      const rawVal = p[sensorKey as keyof TelemetryPoint];
+      let val = typeof rawVal === 'number' ? rawVal : 0;
+      if (sensorKey === 'gasCo') val = p.coLevel ?? p.gasCo ?? 306;
+      if (sensorKey === 'airQualityMq135') val = p.airQualityMq135 ?? (p.gasCo ? Math.round(p.gasCo * 0.6) : 185);
+      if (sensorKey === 'waterLevel') val = p.waterLevel ?? 28;
+      if (sensorKey === 'airPressure') val = p.airPressure ?? 103.5;
+      if (sensorKey === 'ambientLight') val = p.ambientLight ?? 120;
+
       const normalizedY = (val - sensor.minDomain) / (sensor.maxDomain - sensor.minDomain || 1);
       const clampedNorm = Math.max(0, Math.min(1, normalizedY));
       const y = padding.top + (1 - clampedNorm) * usableHeight;
@@ -122,21 +144,29 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
     return `${linePath} L ${lastX} ${bottomY} L ${firstX} ${bottomY} Z`;
   };
 
-  // Download CSV
-  const exportCsv = () => {
+  // Download Excel
+  const exportExcel = () => {
     if (points.length === 0) return;
-    let csv = 'Timestamp,Time,Temperature_C,Humidity_Pct,Gas_PPM,SoilMoisture_Pct,Fan_Speed_Pct,Relay1,Relay2\n';
-    points.forEach(p => {
-      csv += `${p.timestamp},${p.timeStr},${p.temperature},${p.humidity},${p.gasCo},${p.soilMoisture},${p.fanSpeed},${p.relay1},${p.relay2}\n`;
-    });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `blynk_telemetry_${currentFilter}_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    
+    // Prepare data excluding Fan_Speed_Pct, Relay1, Relay2
+    const data = points.map(p => ({
+      Timestamp: p.timestamp,
+      Time: p.timeStr,
+      Temperature_C: p.temperature,
+      Humidity_Pct: p.humidity,
+      CO_Gas_PPM: p.coLevel ?? p.gasCo ?? 306,
+      MQ135_Gas_PPM: p.airQualityMq135 ?? 185,
+      Water_Level_Pct: p.waterLevel ?? 28,
+      Air_Pressure_kPa: p.airPressure ?? 103.5,
+      Ambient_Light_lx: p.ambientLight ?? 120,
+      SoilMoisture_Pct: p.soilMoisture,
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Telemetry");
+    
+    XLSX.writeFile(workbook, `blynk_telemetry_${currentFilter}_${Date.now()}.xlsx`);
   };
 
   const timeFilterOptions: { key: TimeFilter; label: string; labelKhmer: string }[] = [
@@ -190,8 +220,8 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
           
           <button
             id="export-csv-btn"
-            onClick={exportCsv}
-            title={lang === 'km' ? 'ទាញយក CSV' : 'Export CSV'}
+            onClick={exportExcel}
+            title={lang === 'km' ? 'ទាញយក Excel' : 'Export Excel'}
             className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg ml-1 transition"
           >
             <Download className="w-4 h-4" />
@@ -203,6 +233,15 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
       <div className="flex flex-wrap items-center gap-2 pt-3 pb-2">
         {SENSORS.map(s => {
           const isActive = activeSensors[s.key];
+          let hoverVal: number | string | undefined = undefined;
+          if (hoveredPoint) {
+            if (s.key === 'gasCo') hoverVal = hoveredPoint.coLevel ?? hoveredPoint.gasCo ?? 306;
+            else if (s.key === 'airQualityMq135') hoverVal = hoveredPoint.airQualityMq135 ?? 185;
+            else if (s.key === 'waterLevel') hoverVal = hoveredPoint.waterLevel ?? 28;
+            else if (s.key === 'airPressure') hoverVal = hoveredPoint.airPressure ?? 103.5;
+            else hoverVal = hoveredPoint[s.key];
+          }
+
           return (
             <button
               key={s.key}
@@ -219,9 +258,9 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
                 style={{ backgroundColor: s.color, transform: isActive ? 'scale(1)' : 'scale(0.7)' }}
               />
               <span>{lang === 'km' ? s.labelKhmer : s.label}</span>
-              {hoveredPoint && isActive && (
+              {hoveredPoint && isActive && hoverVal !== undefined && (
                 <span className="ml-1 font-mono text-slate-900 dark:text-slate-200 font-extrabold">
-                  {hoveredPoint[s.key]}
+                  {hoverVal}
                   {s.unit}
                 </span>
               )}
@@ -361,7 +400,14 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
               {/* Dots on each active sensor */}
               {SENSORS.map(s => {
                 if (!activeSensors[s.key]) return null;
-                const val = points[hoverIndex][s.key];
+                const rawVal = points[hoverIndex][s.key as keyof TelemetryPoint];
+                let val = typeof rawVal === 'number' ? rawVal : 0;
+                if (s.key === 'gasCo') val = points[hoverIndex].coLevel ?? points[hoverIndex].gasCo ?? 306;
+                else if (s.key === 'airQualityMq135') val = points[hoverIndex].airQualityMq135 ?? 185;
+                else if (s.key === 'waterLevel') val = points[hoverIndex].waterLevel ?? 28;
+                else if (s.key === 'airPressure') val = points[hoverIndex].airPressure ?? 103.5;
+                else if (s.key === 'ambientLight') val = points[hoverIndex].ambientLight ?? 120;
+
                 const normalizedY = (val - s.minDomain) / (s.maxDomain - s.minDomain || 1);
                 const clampedNorm = Math.max(0, Math.min(1, normalizedY));
                 const cx = padding.left + (hoverIndex / (points.length - 1)) * usableWidth;
@@ -387,7 +433,7 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
         {hoverIndex !== null && points[hoverIndex] && (
           <div
             className="absolute top-2 right-4 bg-white/95 dark:bg-slate-950/95 border border-slate-200 dark:border-slate-700/80 rounded-xl p-3 shadow-2xl pointer-events-none text-xs backdrop-blur-md"
-            style={{ minWidth: '160px' }}
+            style={{ minWidth: '175px' }}
           >
             <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mb-1 pb-1 border-b border-slate-200 dark:border-slate-800 flex justify-between">
               <span>Time:</span>
@@ -395,14 +441,22 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
             </div>
             {SENSORS.map(s => {
               if (!activeSensors[s.key]) return null;
+              let tipVal: number | string = 0;
+              if (s.key === 'gasCo') tipVal = points[hoverIndex].coLevel ?? points[hoverIndex].gasCo ?? 306;
+              else if (s.key === 'airQualityMq135') tipVal = points[hoverIndex].airQualityMq135 ?? 185;
+              else if (s.key === 'waterLevel') tipVal = points[hoverIndex].waterLevel ?? 28;
+              else if (s.key === 'airPressure') tipVal = points[hoverIndex].airPressure ?? 103.5;
+              else if (s.key === 'ambientLight') tipVal = points[hoverIndex].ambientLight ?? 120;
+              else tipVal = points[hoverIndex][s.key] ?? 0;
+
               return (
                 <div key={`tip-${s.key}`} className="flex items-center justify-between py-0.5">
                   <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
                     <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
-                    {s.label}:
+                    {lang === 'km' ? s.labelKhmer : s.label}:
                   </span>
                   <span className="font-mono font-bold text-slate-900 dark:text-white">
-                    {points[hoverIndex][s.key]} {s.unit}
+                    {tipVal} {s.unit}
                   </span>
                 </div>
               );
@@ -411,24 +465,32 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
         )}
       </div>
 
-      {/* Bottom Summary Bar */}
+      {/* Bottom Summary Bar with Average CO, MQ135 (NH3/CO2), Water Level, Air Pressure */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 mt-3 border-t border-slate-200 dark:border-slate-800/80 text-xs">
         <div className="bg-slate-50 dark:bg-slate-950/50 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800/60">
-          <span className="text-slate-500 dark:text-slate-400 block text-[11px] font-semibold">Avg Temp</span>
-          <span className="text-sm sm:text-base font-bold text-orange-600 dark:text-orange-400 font-mono">{stats.tempAvg}°C</span>
-          <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-1 font-mono">({stats.tempMin}-{stats.tempMax}°C)</span>
+          <span className="text-slate-500 dark:text-slate-400 block text-[11px] font-semibold">
+            {lang === 'km' ? 'មធ្យមភាគ CO (Avg)' : 'Avg CO Gas'}
+          </span>
+          <span className="text-sm sm:text-base font-bold text-red-600 dark:text-red-400 font-mono">{stats.coAvg} ppm</span>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-1 font-mono">({stats.coMin}-{stats.coMax})</span>
         </div>
         <div className="bg-slate-50 dark:bg-slate-950/50 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800/60">
-          <span className="text-slate-500 dark:text-slate-400 block text-[11px] font-semibold">Avg Humidity</span>
-          <span className="text-sm sm:text-base font-bold text-cyan-600 dark:text-cyan-400 font-mono">{stats.humAvg}%</span>
+          <span className="text-slate-500 dark:text-slate-400 block text-[11px] font-semibold">
+            {lang === 'km' ? 'ផ្សែង/ឧស្ម័ន MQ135 (CO2/NH3)' : 'Avg MQ135 Gas'}
+          </span>
+          <span className="text-sm sm:text-base font-bold text-purple-600 dark:text-purple-400 font-mono">{stats.mqAvg} ppm</span>
         </div>
         <div className="bg-slate-50 dark:bg-slate-950/50 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800/60">
-          <span className="text-slate-500 dark:text-slate-400 block text-[11px] font-semibold">Avg Air Quality</span>
-          <span className="text-sm sm:text-base font-bold text-purple-600 dark:text-purple-400 font-mono">{stats.gasAvg} ppm</span>
+          <span className="text-slate-500 dark:text-slate-400 block text-[11px] font-semibold">
+            {lang === 'km' ? 'កម្រិតនីវ៉ូទឹក (Avg)' : 'Avg Water Level'}
+          </span>
+          <span className="text-sm sm:text-base font-bold text-sky-600 dark:text-sky-400 font-mono">{stats.waterAvg}%</span>
         </div>
         <div className="bg-slate-50 dark:bg-slate-950/50 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800/60">
-          <span className="text-slate-500 dark:text-slate-400 block text-[11px] font-semibold">Live Samples</span>
-          <span className="text-sm sm:text-base font-bold text-emerald-600 dark:text-emerald-400 font-mono">{points.length} pts</span>
+          <span className="text-slate-500 dark:text-slate-400 block text-[11px] font-semibold">
+            {lang === 'km' ? 'សម្ពាធបរិយាកាស (Avg)' : 'Avg Air Pressure'}
+          </span>
+          <span className="text-sm sm:text-base font-bold text-emerald-600 dark:text-emerald-400 font-mono">{stats.pressAvg} kPa</span>
         </div>
       </div>
     </div>

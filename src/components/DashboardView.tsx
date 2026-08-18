@@ -3,11 +3,13 @@ import { IoTDevice, VirtualPinId, TelemetryPoint, TimeFilter } from '../types';
 import { DashboardWidget } from '../types/widgetBuilder';
 import { RadialGauge } from './RadialGauge';
 import { WaterTankLevel } from './WaterTankLevel';
+import { SmartBinLevel } from './SmartBinLevel';
 import { TelemetryChart } from './TelemetryChart';
 import { BlynkDashboardEditor } from './BlynkDashboardEditor';
 import { SmartSwitch } from './SmartSwitch';
 import { GoldenRockerSwitch } from './GoldenRockerSwitch';
 import { C3SmartBinDualPanel } from './C3SmartBinDualPanel';
+import { SchoolLightPanel } from './SchoolLightPanel';
 import {
   Thermometer,
   Droplets,
@@ -116,11 +118,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (dev.templateId === 'TMPL_ALERT_SYSTEM') {
       return [
         { id: 'w_co', type: 'gauge', title: 'CO Level', titleKhmer: 'កម្រិតឧស្ម័ន CO', pin: 'V0', min: 0, max: 500, unit: 'ppm', color: '#f87171', widthCols: 1 },
+        { id: 'w_mq135', type: 'gauge', title: 'MQ135 Air Quality', titleKhmer: 'គុណភាពខ្យល់ (MQ135)', pin: 'V5', min: 0, max: 1000, unit: 'ppm', color: '#a855f7', widthCols: 1 },
         { id: 'w_press', type: 'gauge', title: 'Air Pressure', titleKhmer: 'សម្ពាធបរិយាកាស', pin: 'V1', min: 0, max: 120, unit: 'kPa', color: '#34d399', widthCols: 1 },
         { id: 'w_water', type: 'water_tank', title: 'Water Level', titleKhmer: 'កម្រិតទឹកក្នុងអាង', pin: 'V2', min: 0, max: 100, unit: '%', color: '#0ea5e9', widthCols: 1 },
-        { id: 'w_siren', type: 'switch', title: 'Siren Alert', titleKhmer: 'ស៊ីរ៉ែនប្រកាសអាសន្ន', pin: 'V6', color: '#ef4444', widthCols: 1 },
+        { id: 'w_siren', type: 'switch', title: 'Siren', titleKhmer: 'ស៊ីរ៉ែន', pin: 'V6', color: '#ef4444', widthCols: 1 },
         { id: 'w_strobe', type: 'switch', title: 'Strobe Light', titleKhmer: 'ភ្លើងស៊ីញ៉ូ', pin: 'V3', color: '#f59e0b', widthCols: 1 },
-        { id: 'w_fan', type: 'slider', title: 'Exhaust Fan Speed', titleKhmer: 'ល្បឿនកង្ហារ', pin: 'V4', min: 0, max: 100, unit: '%', color: '#3b82f6', widthCols: 1 },
+        { id: 'w_telegram', type: 'switch', title: 'Telegram', titleKhmer: 'Telegram', pin: 'V7', color: '#0284c7', widthCols: 1 },
+        { id: 'w_email', type: 'switch', title: 'Email', titleKhmer: 'Email', pin: 'V8', color: '#eab308', widthCols: 1 },
+        { id: 'w_call', type: 'switch', title: 'Phone Call', titleKhmer: 'ទូរស័ព្ទ', pin: 'V9', color: '#10b981', widthCols: 1 },
       ];
     }
     if (dev.templateId === 'TMPL_TRAFFIC_PARKING') {
@@ -139,6 +144,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         { id: 'w_sw1', type: 'switch', title: 'SWITCH 1 (LED 1)', titleKhmer: 'កុងតាក់ ១ (LED 1)', pin: 'V2', color: '#eab308', widthCols: 1 },
         { id: 'w_sw2', type: 'switch', title: 'SWITCH 2 (LED 2)', titleKhmer: 'កុងតាក់ ២ (LED 2)', pin: 'V3', color: '#f59e0b', widthCols: 1 },
         { id: 'w_tg_alert', type: 'label', title: 'Telegram Alert', titleKhmer: 'Telegram Alert', pin: 'V4', value: 0, unit: 'Status', color: '#0ea5e9', widthCols: 1 },
+      ];
+    }
+    if (dev.templateId === 'TMPL_SCHOOL_LIGHTS') {
+      return [
+        { id: 'w_school', type: 'switch', title: 'School Light', titleKhmer: 'ភ្លើងសាលាសុវណ្ណភូមិផ្សារដីហុយ', pin: 'V1', color: '#f59e0b', widthCols: 1 },
+        { id: 'w_building', type: 'switch', title: 'Building Light', titleKhmer: 'ភ្លើងអគារ', pin: 'V2', color: '#3b82f6', widthCols: 1 },
+        { id: 'w_playground', type: 'switch', title: 'Playground Light', titleKhmer: 'ភ្លើង Playground', pin: 'V3', color: '#10b981', widthCols: 1 },
       ];
     }
     // Default / ESP32-CAM / Smart Farm
@@ -167,7 +179,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       const saved = localStorage.getItem(`blynk_widgets_${device.id}`);
       if (saved) {
         try {
-          setDeviceWidgets(JSON.parse(saved));
+          const parsedWidgets = JSON.parse(saved);
+          
+          // Migration for TMPL_ALERT_SYSTEM: Make sure w_mq135 exists
+          if (device.templateId === 'TMPL_ALERT_SYSTEM' && !parsedWidgets.find((w: any) => w.id === 'w_mq135')) {
+             const defaultW = getDefaultWidgetsForDevice(device);
+             const mq135Widget = defaultW.find(w => w.id === 'w_mq135');
+             if (mq135Widget) {
+               parsedWidgets.splice(1, 0, mq135Widget);
+               setDeviceWidgets(parsedWidgets);
+               localStorage.setItem(`blynk_widgets_${device.id}`, JSON.stringify(parsedWidgets));
+               return;
+             }
+          }
+
+          setDeviceWidgets(parsedWidgets);
           return;
         } catch (e) {}
       }
@@ -372,38 +398,75 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* ========================================================================= */}
           {device.templateId === 'TMPL_ALERT_SYSTEM' && (
             <div className="space-y-4">
-              {/* Top 3 Sensor Cards: Picture 2 Dome Gauges (CO Level & Air Pressure) + Picture 3 Water Tank */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Top 4 Sensor Cards: CO Level, MQ135 Air Quality, Air Pressure, Water Tank */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-xl flex flex-col justify-between relative min-h-[220px]">
-                  <RadialGauge
-                    id="gauge-co-level"
-                    value={Number(device.pins.V0?.value ?? 465)}
-                    min={0}
-                    max={500}
-                    unit="ppm"
-                    label="CO Level"
-                    labelKhmer="កម្រិតឧស្ម័ន CO"
-                    color="#ff6b6b"
-                    size={260}
-                    statusText="DANGER / គ្រោះថ្នាក់"
-                    statusColor="#ef4444"
-                  />
+                  {(() => {
+                    const val = Number(device.pins.V0?.value ?? 465);
+                    const isDanger = val > 300;
+                    const isWarning = val > 150 && val <= 300;
+                    return (
+                      <RadialGauge
+                        id="gauge-co-level"
+                        value={val}
+                        min={0}
+                        max={500}
+                        unit="ppm"
+                        label="CO Level"
+                        labelKhmer="កម្រិតឧស្ម័ន CO"
+                        color={isDanger ? '#ff6b6b' : isWarning ? '#facc15' : '#4ade80'}
+                        size={260}
+                        statusText={isDanger ? "DANGER / គ្រោះថ្នាក់" : isWarning ? "WARNING / ប្រុងប្រយ័ត្ន" : "NORMAL / ធម្មតា"}
+                        statusColor={isDanger ? "#ef4444" : isWarning ? "#eab308" : "#22c55e"}
+                      />
+                    );
+                  })()}
                 </div>
 
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-xl flex flex-col justify-between relative min-h-[220px]">
-                  <RadialGauge
-                    id="gauge-air-pressure"
-                    value={Number(device.pins.V1?.value ?? 102.09)}
-                    min={0}
-                    max={120}
-                    unit="kPa"
-                    label="Air Pressure"
-                    labelKhmer="សម្ពាធបរិយាកាស"
-                    color="#34d399"
-                    size={260}
-                    statusText="NORMAL / ធម្មតា"
-                    statusColor="#10b981"
-                  />
+                  {(() => {
+                    const val = Number(device.pins.V5?.value ?? 310);
+                    const isPoor = val > 400;
+                    const isFair = val > 200 && val <= 400;
+                    return (
+                      <RadialGauge
+                        id="gauge-mq135-level"
+                        value={val}
+                        min={0}
+                        max={1000}
+                        unit="ppm"
+                        label="MQ135 Air Quality"
+                        labelKhmer="គុណភាពខ្យល់ (MQ135)"
+                        color={isPoor ? '#a855f7' : isFair ? '#facc15' : '#4ade80'}
+                        size={260}
+                        statusText={isPoor ? "POOR / ខ្សោយ" : isFair ? "FAIR / មធ្យម" : "GOOD / ល្អ"}
+                        statusColor={isPoor ? "#a855f7" : isFair ? "#eab308" : "#22c55e"}
+                      />
+                    );
+                  })()}
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-xl flex flex-col justify-between relative min-h-[220px]">
+                  {(() => {
+                    const val = Number(device.pins.V1?.value ?? 102.09);
+                    const isLow = val < 95;
+                    const isHigh = val > 105;
+                    return (
+                      <RadialGauge
+                        id="gauge-air-pressure"
+                        value={val}
+                        min={0}
+                        max={120}
+                        unit="kPa"
+                        label="Air Pressure"
+                        labelKhmer="សម្ពាធបរិយាកាស"
+                        color={isLow ? '#facc15' : isHigh ? '#ff6b6b' : '#34d399'}
+                        size={260}
+                        statusText={isLow ? "LOW / ទាប" : isHigh ? "HIGH / ខ្ពស់" : "NORMAL / ធម្មតា"}
+                        statusColor={isLow ? "#eab308" : isHigh ? "#ef4444" : "#10b981"}
+                      />
+                    );
+                  })()}
                 </div>
 
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-xl flex flex-col justify-between relative min-h-[220px]">
@@ -420,103 +483,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     lang={lang}
                   />
                 </div>
-              </div>
-
-              {/* Middle Actuator Row with Tactile Smart Switches & Speed Slider */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <SmartSwitch
-                  id="switch-siren-alert"
-                  title="Siren Alert"
-                  titleKhmer="ស៊ីរ៉ែនប្រកាសអាសន្ន"
-                  subtitle="Pin V6 • High-Decibel Buzzer"
-                  pinLabel="V6"
-                  isOn={Number(device.pins.V6?.value) === 1}
-                  onToggle={() => onUpdatePin('V6', Number(device.pins.V6?.value) === 1 ? 0 : 1)}
-                  variant="siren"
-                  lang={lang}
-                />
-
-                <SmartSwitch
-                  id="switch-strobe-light"
-                  title="Strobe Light"
-                  titleKhmer="ភ្លើងសញ្ញាស៊ីញ៉ូ"
-                  subtitle="Pin V3 • Flashing Warning LED"
-                  pinLabel="V3"
-                  isOn={Number(device.pins.V3?.value) === 1}
-                  onToggle={() => onUpdatePin('V3', Number(device.pins.V3?.value) === 1 ? 0 : 1)}
-                  variant="light"
-                  lang={lang}
-                />
-
-                {/* Slider: Fan Speed (V4) */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-xl flex flex-col justify-between">
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <h4 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-tight">
-                        {lang === 'km' ? 'ល្បឿនកង្ហារ (Exhaust Fan)' : 'Exhaust Fan Speed'}
-                      </h4>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">PWM Pin V4 • 0 - 100%</p>
-                    </div>
-                    <span className="text-base sm:text-lg font-extrabold text-cyan-600 dark:text-cyan-400 font-mono">
-                      {device.pins.V4?.value || 80}%
-                    </span>
-                  </div>
-
-                  <div className="space-y-2 mt-3">
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={Number(device.pins.V4?.value || 80)}
-                      onChange={(e) => onUpdatePin('V4', Number(e.target.value))}
-                      className="w-full h-2.5 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-                    />
-                    <div className="flex justify-between text-[11px] font-mono text-slate-400">
-                      <span>0% (OFF)</span>
-                      <span>50%</span>
-                      <span>100% (MAX)</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom Communication Channels: Telegram, Email, VoIP Call */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <SmartSwitch
-                  id="switch-telegram-alert"
-                  title="Telegram Alert"
-                  titleKhmer="ការជូនដំណឹង Telegram"
-                  subtitle="Bot Channel @blynk_alert_kh"
-                  pinLabel="V7"
-                  isOn={Number(device.pins.V7?.value ?? 1) === 1}
-                  onToggle={() => onUpdatePin('V7', Number(device.pins.V7?.value ?? 1) === 1 ? 0 : 1)}
-                  variant="telegram"
-                  lang={lang}
-                />
-
-                <SmartSwitch
-                  id="switch-email-alert"
-                  title="Email Dispatch"
-                  titleKhmer="ការជូនដំណឹង Email"
-                  subtitle="SMTP Notification Service"
-                  pinLabel="V8"
-                  isOn={Number(device.pins.V8?.value ?? 1) === 1}
-                  onToggle={() => onUpdatePin('V8', Number(device.pins.V8?.value ?? 1) === 1 ? 0 : 1)}
-                  variant="email"
-                  lang={lang}
-                />
-
-                <SmartSwitch
-                  id="switch-call-alert"
-                  title="Phone Call Alert"
-                  titleKhmer="ទូរស័ព្ទអាសន្ន (VoIP)"
-                  subtitle="Automated Voice Broadcast"
-                  pinLabel="V9"
-                  isOn={Number(device.pins.V9?.value ?? 0) === 1}
-                  onToggle={() => onUpdatePin('V9', Number(device.pins.V9?.value ?? 0) === 1 ? 0 : 1)}
-                  variant="call"
-                  lang={lang}
-                />
               </div>
 
               {/* Real-Time Telemetry Chart */}
@@ -657,30 +623,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* ========================================================================= */}
           {device.templateId === 'TMPL_SMART_BIN' && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Trash Fill Gauge */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-xl flex flex-col justify-between min-h-[220px]">
-                  <RadialGauge
-                    id="gauge-bin-fill"
-                    value={Number(device.pins.V1?.value ?? 68)}
-                    min={0}
-                    max={100}
-                    unit="%"
-                    label="Fill Level"
-                    labelKhmer="កម្រិតពេញនៃធុងសំរាម"
-                    color="#f59e0b"
-                    size={260}
-                    statusText="68% FULL"
-                    statusColor="#f59e0b"
-                  />
-                </div>
+              {/* Top Dual Bin Display */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-xl flex flex-col justify-center min-h-[350px]">
+                <SmartBinLevel
+                  id="smart-bin-dual-level"
+                  wetValue={Number(device.pins.V3?.value ?? 18)}
+                  dryValue={Number(device.pins.V1?.value ?? 60)}
+                  lang={lang}
+                />
+              </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Trash Lid Smart Switch */}
                 <SmartSwitch
                   id="switch-bin-lid"
                   title="Open Trash Lid"
                   titleKhmer="បញ្ជាគម្របធុងសំរាម (Servo)"
-                  subtitle="Pin V0 • Smart Servo Latch"
+                  subtitle="Pin V0"
                   pinLabel="V0"
                   isOn={Number(device.pins.V0?.value ?? 0) === 1}
                   onToggle={() => onUpdatePin('V0', Number(device.pins.V0?.value ?? 0) === 1 ? 0 : 1)}
@@ -808,7 +767,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             device.templateId !== 'TMPL_TRAFFIC_PARKING' &&
             device.templateId !== 'TMPL_SMART_BIN' &&
             device.templateId !== 'TMPL_SMART_LAMP_MQ135' &&
-            device.templateId !== 'TMPL_ESP32C3_SMART_BIN_DUAL'
+            device.templateId !== 'TMPL_ESP32C3_SMART_BIN_DUAL' &&
+            device.templateId !== 'TMPL_SCHOOL_LIGHTS'
           )) && (
             <div className="space-y-4">
               {/* Top Gauges & Telemetry Stats */}
@@ -914,6 +874,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 data={telemetryData}
                 currentFilter={timeFilter}
                 onFilterChange={onTimeFilterChange}
+                lang={lang}
+              />
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TEMPLATE 7: SCHOOL LIGHT CONTROLS                                       */}
+          {/* ========================================================================= */}
+          {device.templateId === 'TMPL_SCHOOL_LIGHTS' && (
+            <div className="space-y-6 pt-4">
+              <SchoolLightPanel 
+                device={device}
+                onUpdatePin={onUpdatePin}
                 lang={lang}
               />
             </div>
