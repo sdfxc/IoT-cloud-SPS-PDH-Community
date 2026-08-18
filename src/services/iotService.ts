@@ -144,7 +144,7 @@ class IoTService {
   public async updatePin(token: string, pin: VirtualPinId, value: number | string, customIp?: string, deviceId?: string): Promise<boolean> {
     try {
       // 1. If user entered a local IP (e.g. 192.168.0.169), dispatch direct LAN call immediately
-      const savedIp = customIp || (typeof window !== 'undefined' ? (localStorage.getItem(`sps_peh_chip_ip_${deviceId || ''}`) || localStorage.getItem('sps_peh_chip_ip') || '192.168.0.169') : null);
+      const savedIp = customIp || (typeof window !== 'undefined' ? (localStorage.getItem(`sps_peh_chip_ip_${deviceId || ''}`) || '192.168.0.169') : null);
       if (savedIp) {
         try {
           const actionPath = Number(value) === 1 ? 'on' : 'off';

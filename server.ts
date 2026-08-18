@@ -304,7 +304,7 @@ setInterval(() => {
 
     broadcastSSE('telemetry_tick', { point: newPoint, deviceId: primaryDev.id, pins: primaryDev.pins });
   }
-}, 500);
+}, 1000);
 
 async function startServer() {
   const app = express();

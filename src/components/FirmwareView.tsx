@@ -1491,7 +1491,11 @@ void sendTelegramMessage(String message) {
     HTTPClient http;
     String encodedMessage = urlEncode(message);
     String url = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage?chat_id=" + CHAT_ID + "&text=" + encodedMessage;
-    http.begin(url);
+    
+    WiFiClientSecure client;
+    client.setInsecure();
+    http.begin(client, url);
+    
     http.GET();
     http.end();
   }
@@ -1589,7 +1593,7 @@ void setup() {
 // Forward real readings to Web Cloud Dashboard if connected to Wi-Fi
 unsigned long lastCloudPush = 0;
 void pushDataToCloud() {
-  if (WiFi.status() == WL_CONNECTED && millis() - lastCloudPush > 800) {
+  if (WiFi.status() == WL_CONNECTED && millis() - lastCloudPush > 1000) {
     lastCloudPush = millis();
     HTTPClient http;
     float dist = getDistance();
@@ -1599,7 +1603,15 @@ void pushDataToCloud() {
 
     // Send HTTP GET to cloud backend automatically (Supports instant real-time sync)
     String cloudUrl = "https://ais-dev-27zugh4jcphio6ahgdc4og-250832150518.asia-southeast1.run.app/api/iot/c3/update?distance=" + String(dist, 1) + "&level=" + String(level) + "&ppm=" + String(ppm) + "&airBad=" + String(airBad ? "1" : "0");
-    http.begin(cloudUrl);
+    
+    if (cloudUrl.startsWith("https://")) {
+      WiFiClientSecure client;
+      client.setInsecure();
+      http.begin(client, cloudUrl);
+    } else {
+      http.begin(cloudUrl);
+    }
+    
     http.setTimeout(1000);
     http.GET();
     http.end();
@@ -1819,7 +1831,11 @@ void sendTelegramMessage(String message) {
     HTTPClient http;
     String encodedMessage = urlEncode(message);
     String url = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage?chat_id=" + CHAT_ID + "&text=" + encodedMessage;
-    http.begin(url);
+    
+    WiFiClientSecure client;
+    client.setInsecure();
+    http.begin(client, url);
+    
     http.GET();
     http.end();
   }
@@ -1846,15 +1862,23 @@ void handleNotFound() {
 // Forward real readings / Pull relay commands to/from Web Cloud Dashboard if connected to Wi-Fi
 unsigned long lastCloudSync = 0;
 void syncWithCloud() {
-  if (WiFi.status() == WL_CONNECTED && millis() - lastCloudSync > 1500) {
+  if (WiFi.status() == WL_CONNECTED && millis() - lastCloudSync > 1000) {
     lastCloudSync = millis();
     HTTPClient http;
     
     // Polling V1, V2, and V3 relay states from the cloud server
     // Fetches {"v1": 0, "v2": 1, "v3": 0} and applies them locally in real-time
     String url = "${serverUrl}/api/iot/get?token=${blynkAuthToken}";
-    http.begin(url);
-    http.setTimeout(1200);
+    
+    if (url.startsWith("https://")) {
+      WiFiClientSecure client;
+      client.setInsecure();
+      http.begin(client, url);
+    } else {
+      http.begin(url);
+    }
+    
+    http.setTimeout(2500);
     int httpCode = http.GET();
     
     if (httpCode == 200) {

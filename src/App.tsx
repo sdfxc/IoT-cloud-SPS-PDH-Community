@@ -206,8 +206,12 @@ export default function App() {
       })
     );
 
-    // Call REST backend
-    await iotService.updatePin(activeDevice.authToken, pin, value, undefined, activeDevice.id);
+    // Call REST backend with the correct isolated IP address (checks localStorage first, then falls back to backend's device.ipAddress)
+    const savedIp = typeof window !== 'undefined' && activeDevice.id
+      ? localStorage.getItem(`sps_peh_chip_ip_${activeDevice.id}`) || activeDevice.ipAddress || '192.168.0.169'
+      : activeDevice.ipAddress || '192.168.0.169';
+
+    await iotService.updatePin(activeDevice.authToken, pin, value, savedIp, activeDevice.id);
   }, [activeDevice]);
 
   // Toggle simulation
