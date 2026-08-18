@@ -1612,7 +1612,16 @@ void loop() {
   pushDataToCloud();
 }
 `;
-  const esp32SchoolLightsCode = `
+  const esp32SchoolLightsCode = `/*
+ * ==============================================================================
+ * Project: ESP32 30-Pin School Lights - Smart Relay System (Dual-Mode AP + Cloud STA)
+ * Hardware: ESP32 30-Pin (WROOM-32D)
+ * Wi-Fi: AP ("SmartBin-ESP32" 192.168.4.1) + STA ("\${wifiSsid}") with Cloud Polling Sync
+ * Actuators: School Light (GPIO 19), Building Light (GPIO 21), Playground Light (GPIO 22)
+ * Telegram Alerts: Bot "\${telegramBotToken}" -> Chat ID "\${telegramChatId}"
+ * ==============================================================================
+ */
+
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
@@ -1627,12 +1636,13 @@ void loop() {
 const char* ap_ssid = "SmartBin-ESP32";
 const char* ap_password = "12345678";
 
-const char* wifi_ssid = "SMART-WIFI-B339";        // ដាក់ឈ្មោះ Wi-Fi ផ្ទះ/Hotspot
-const char* wifi_password = "5E85D60F"; // ដាក់លេខសម្ងាត់ Wi-Fi
+// 2. Wi-Fi Home/Router Credentials (សម្រាប់ ESP32 ភ្ជាប់អុីនធឺណិត)
+const char* wifi_ssid = "${wifiSsid}";        // ដាក់ឈ្មោះ Wi-Fi ផ្ទះ/Hotspot
+const char* wifi_password = "${wifiPass}"; // ដាក់លេខសម្ងាត់ Wi-Fi
 
 // Telegram Credentials
-const String BOT_TOKEN = "8928313450:AAEvmTZMGGDXRJZ-W1ZuE2vc5AlVSQ5oDbY";
-const String CHAT_ID   = "5780071626";
+const String BOT_TOKEN = "${telegramBotToken}";
+const String CHAT_ID   = "${telegramChatId}";
 
 IPAddress local_ip(192, 168, 4, 1);
 IPAddress gateway(192, 168, 4, 1);
@@ -1724,7 +1734,7 @@ const char HTML_CONTENT[] PROGMEM = R"rawliteral(
 
     <!-- Widget: Switches -->
     <div class="card">
-        <h2>ប្រព័ន្ធគ្រប់គ្រងភ្លើង</h2>
+        <h2>ប្រព័ន្ធគ្រប់គ្រងភ្លើង (School Relays)</h2>
         <div class="status-container">
             <div id="status1" class="status-title">សាលា: OFF</div>
             <div id="status2" class="status-title">អគារ: OFF</div>
@@ -1833,6 +1843,49 @@ void handleNotFound() {
   server.send(302, "text/plain", "");
 }
 
+// Forward real readings / Pull relay commands to/from Web Cloud Dashboard if connected to Wi-Fi
+unsigned long lastCloudSync = 0;
+void syncWithCloud() {
+  if (WiFi.status() == WL_CONNECTED && millis() - lastCloudSync > 1500) {
+    lastCloudSync = millis();
+    HTTPClient http;
+    
+    // Polling V1, V2, and V3 relay states from the cloud server
+    // Fetches {"v1": 0, "v2": 1, "v3": 0} and applies them locally in real-time
+    String url = "${serverUrl}/api/iot/get?token=${blynkAuthToken}";
+    http.begin(url);
+    http.setTimeout(1200);
+    int httpCode = http.GET();
+    
+    if (httpCode == 200) {
+      String payload = http.getString();
+      
+      // Simple lightweight parsing to avoid heavy Json libraries
+      int v1Idx = payload.indexOf("\"v1\":");
+      if (v1Idx != -1) {
+        char v1Val = payload.charAt(v1Idx + 5);
+        if (v1Val == '1') digitalWrite(LED_SCHOOL_PIN, HIGH);
+        else if (v1Val == '0') digitalWrite(LED_SCHOOL_PIN, LOW);
+      }
+      
+      int v2Idx = payload.indexOf("\"v2\":");
+      if (v2Idx != -1) {
+        char v2Val = payload.charAt(v2Idx + 5);
+        if (v2Val == '1') digitalWrite(LED_BUILDING_PIN, HIGH);
+        else if (v2Val == '0') digitalWrite(LED_BUILDING_PIN, LOW);
+      }
+      
+      int v3Idx = payload.indexOf("\"v3\":");
+      if (v3Idx != -1) {
+        char v3Val = payload.charAt(v3Idx + 5);
+        if (v3Val == '1') digitalWrite(LED_PLAYGROUND_PIN, HIGH);
+        else if (v3Val == '0') digitalWrite(LED_PLAYGROUND_PIN, LOW);
+      }
+    }
+    http.end();
+  }
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -1876,6 +1929,7 @@ void setup() {
 void loop() {
   dnsServer.processNextRequest();
   server.handleClient();
+  syncWithCloud();
 }
 `;
 

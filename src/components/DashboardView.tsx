@@ -63,8 +63,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [copiedToken, setCopiedToken] = useState(false);
   const [isEditingLayout, setIsEditingLayout] = useState(false);
   const [dashboardIp, setDashboardIp] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('sps_peh_chip_ip') || device?.ipAddress || '192.168.0.169';
+    if (typeof window !== 'undefined' && device?.id) {
+      return localStorage.getItem(`sps_peh_chip_ip_${device.id}`) || device?.ipAddress || '192.168.0.169';
     }
     return device?.ipAddress || '192.168.0.169';
   });
@@ -72,14 +72,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [isPinging, setIsPinging] = useState(false);
   const [pingResult, setPingResult] = useState<{ ok: boolean; message: string } | null>(null);
 
-  const handleSaveIp = (newIp: string) => {
+  // Sync IP input value when switching devices
+  useEffect(() => {
+    if (device?.id) {
+      const savedIp = localStorage.getItem(`sps_peh_chip_ip_${device.id}`) || device.ipAddress || '192.168.0.169';
+      setDashboardIp(savedIp);
+    }
+  }, [device?.id]);
+
+  const handleSaveIp = async (newIp: string) => {
     setDashboardIp(newIp);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('sps_peh_chip_ip', newIp);
-      if (device) {
+      if (device?.id) {
         localStorage.setItem(`sps_peh_chip_ip_${device.id}`, newIp);
       }
     }
+
+    // Save to backend server so other devices get the correct IP automatically!
+    if (device?.authToken) {
+      try {
+        await fetch(`/api/iot/update?token=${encodeURIComponent(device.authToken)}&ip=${encodeURIComponent(newIp)}`);
+      } catch (err) {
+        console.error('Failed to save IP to server', err);
+      }
+    }
+
     setIpSavedToast(`✅ បានរក្សាទុក IP: ${newIp} ជោគជ័យ!`);
     setTimeout(() => {
       setIpSavedToast(null);
@@ -290,8 +307,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     value={dashboardIp}
                     onChange={(e) => {
                       setDashboardIp(e.target.value);
-                      if (typeof window !== 'undefined') {
-                        localStorage.setItem('sps_peh_chip_ip', e.target.value);
+                      if (typeof window !== 'undefined' && device?.id) {
+                        localStorage.setItem(`sps_peh_chip_ip_${device.id}`, e.target.value);
                       }
                     }}
                     placeholder="192.168.0.169"

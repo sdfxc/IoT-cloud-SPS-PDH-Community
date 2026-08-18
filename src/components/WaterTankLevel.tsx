@@ -54,9 +54,6 @@ export const WaterTankLevel: React.FC<WaterTankLevelProps> = ({
             <Droplets className="w-4 h-4 text-sky-500" />
             <span>{label}</span>
           </h4>
-          {labelKhmer && (
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{labelKhmer}</p>
-          )}
         </div>
 
         {/* High Alarm / Status Pill */}
@@ -94,9 +91,9 @@ export const WaterTankLevel: React.FC<WaterTankLevelProps> = ({
 
             {/* Top SENSOR Pill Badge */}
             <div className="absolute top-2.5 left-1/2 -translate-x-1/2 z-20">
-              <div className="bg-[#181d24] text-white text-[10px] font-bold tracking-wider px-3.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm border border-slate-700/60">
-                <span className="w-2 h-2 rounded-full bg-slate-500 border border-slate-400 inline-block" />
-                <span>SENSOR</span>
+              <div className="bg-[#181d24] text-white text-[9px] font-bold tracking-wider px-3 py-1 rounded-full flex items-center gap-1 shadow-sm border border-slate-700/60">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-500 border border-slate-400 inline-block" />
+                <span>ULTRASONIC</span>
               </div>
             </div>
 
@@ -131,10 +128,10 @@ export const WaterTankLevel: React.FC<WaterTankLevelProps> = ({
             >
               <defs>
                 <linearGradient id={`tankGradient-${id || 'def'}`} x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#00d4ff" />
-                  <stop offset="35%" stopColor="#00b4d8" />
-                  <stop offset="70%" stopColor="#0077b6" />
-                  <stop offset="100%" stopColor="#0051ff" />
+                  <stop offset="0%" stopColor="#06b6d4" />
+                  <stop offset="35%" stopColor="#0284c7" />
+                  <stop offset="70%" stopColor="#1e3a8a" />
+                  <stop offset="100%" stopColor="#0f172a" />
                 </linearGradient>
 
                 <clipPath id={`capsuleClip-${id || 'def'}`}>
@@ -188,6 +185,28 @@ export const WaterTankLevel: React.FC<WaterTankLevelProps> = ({
                       fill="#ffffff"
                       opacity="0.45"
                     />
+                    <circle
+                      cx="30"
+                      cy={Math.min(capsuleHeight - 50, liquidY + liquidHeight * 0.45)}
+                      r="2.5"
+                      fill="#ffffff"
+                      opacity="0.3"
+                      className="animate-pulse"
+                    />
+                    <circle
+                      cx="160"
+                      cy={Math.min(capsuleHeight - 30, liquidY + liquidHeight * 0.7)}
+                      r="3.5"
+                      fill="#ffffff"
+                      opacity="0.4"
+                    />
+                    <circle
+                      cx="110"
+                      cy={Math.min(capsuleHeight - 60, liquidY + liquidHeight * 0.2)}
+                      r="2"
+                      fill="#ffffff"
+                      opacity="0.5"
+                    />
                   </>
                 )}
               </g>
@@ -208,9 +227,9 @@ export const WaterTankLevel: React.FC<WaterTankLevelProps> = ({
       {/* Bottom Volume & Capacity Metrics */}
       <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80 text-xs">
         <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-          <span>{lang === 'km' ? 'មាឌទឹកសរុប:' : 'Volume:'}</span>
+          <span className="font-medium">{lang === 'km' ? 'ជម្រៅ:' : 'Depth:'}</span>
           <span className="font-mono font-bold text-sky-600 dark:text-sky-400">
-            {currentLiters.toLocaleString()} / {totalCapacityLiters.toLocaleString()} L
+            15cm = 0%, 5cm = 100%
           </span>
         </div>
 

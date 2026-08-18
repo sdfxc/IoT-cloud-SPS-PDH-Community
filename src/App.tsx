@@ -207,7 +207,7 @@ export default function App() {
     );
 
     // Call REST backend
-    await iotService.updatePin(activeDevice.authToken, pin, value);
+    await iotService.updatePin(activeDevice.authToken, pin, value, undefined, activeDevice.id);
   }, [activeDevice]);
 
   // Toggle simulation
