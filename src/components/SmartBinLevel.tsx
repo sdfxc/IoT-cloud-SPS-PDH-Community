@@ -5,6 +5,7 @@ interface SmartBinLevelProps {
   id: string;
   wetValue: number; // 0 to 100
   dryValue: number; // 0 to 100
+  isLidOpen?: boolean;
   label?: string;
   labelKhmer?: string;
   lang?: 'km' | 'en';
@@ -14,6 +15,7 @@ export const SmartBinLevel: React.FC<SmartBinLevelProps> = ({
   id,
   wetValue,
   dryValue,
+  isLidOpen = false,
   label = 'Smart Bin Level',
   labelKhmer = 'កម្រិតសំរាម',
   lang = 'en'
@@ -34,7 +36,7 @@ export const SmartBinLevel: React.FC<SmartBinLevelProps> = ({
         {lang === 'km' && labelKhmer ? labelKhmer : label}
       </h3>
 
-      <div className="flex items-end justify-center gap-8 md:gap-12 w-full max-w-sm px-4">
+      <div className="flex items-center justify-center gap-8 md:gap-12 w-full max-w-sm px-4 relative">
         
         {/* Wet Bin (Left) */}
         <div className="flex flex-col items-center">
@@ -55,9 +57,17 @@ export const SmartBinLevel: React.FC<SmartBinLevelProps> = ({
               Distance: <span className="text-sky-500">{wetCm}</span> cm
             </p>
             <p className="text-[10px] sm:text-xs text-slate-400 mt-1 uppercase font-bold">
-              {lang === 'km' ? 'សំរាមសើម' : 'Wet Trash'}
+              {lang === 'km' ? 'សំរាមសើម' : 'Wet Bin'}
             </p>
           </div>
+        </div>
+
+        {/* Lid Status Indicator (Center) */}
+        <div className="flex flex-col items-center justify-center gap-2">
+           <div className={`w-4 h-4 rounded-full border-2 border-white dark:border-slate-900 shadow-lg transition-all duration-500 ${isLidOpen ? 'bg-emerald-500 shadow-emerald-500/50 animate-pulse' : 'bg-slate-300 dark:bg-slate-700 shadow-none'}`} />
+           <span className={`text-[10px] font-black uppercase tracking-tighter ${isLidOpen ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
+             {lang === 'km' ? (isLidOpen ? 'កំពុងបើក' : 'កំពុងបិទ') : (isLidOpen ? 'OPEN' : 'CLOSED')}
+           </span>
         </div>
 
         {/* Dry Bin (Right) */}
@@ -79,7 +89,7 @@ export const SmartBinLevel: React.FC<SmartBinLevelProps> = ({
               Distance: <span className="text-sky-500">{dryCm}</span> cm
             </p>
             <p className="text-[10px] sm:text-xs text-slate-400 mt-1 uppercase font-bold">
-              {lang === 'km' ? 'សំរាមស្ងួត' : 'Dry Trash'}
+              {lang === 'km' ? 'សំរាមស្ងួត' : 'Dry Bin'}
             </p>
           </div>
         </div>

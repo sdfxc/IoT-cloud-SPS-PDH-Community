@@ -158,30 +158,40 @@ class IoTService {
           if (pin === 'V2') esp32PinMapping = 'led2';
           if (pin === 'V3') esp32PinMapping = 'led3';
           
-          const ifr = (document.getElementById('esp_hidden_sender') as HTMLIFrameElement) || document.createElement('iframe');
-          ifr.id = 'esp_hidden_sender';
-          ifr.style.display = 'none';
-          if (!document.body.contains(ifr)) {
-            document.body.appendChild(ifr);
+          try {
+            const ifr = (document.getElementById('esp_hidden_sender') as HTMLIFrameElement) || document.createElement('iframe');
+            ifr.id = 'esp_hidden_sender';
+            ifr.style.display = 'none';
+            if (!document.body.contains(ifr)) {
+              document.body.appendChild(ifr);
+            }
+            
+            if (esp32PinMapping) {
+              ifr.src = `http://${savedIp}/${esp32PinMapping}/${actionPath}`;
+            } else {
+              ifr.src = targetUrl;
+            }
+          } catch (e) {
+            console.warn('Iframe blocked on mobile Safari', e);
           }
           
-          if (esp32PinMapping) {
-            ifr.src = `http://${savedIp}/${esp32PinMapping}/${actionPath}`;
-          } else {
-            ifr.src = targetUrl;
+          try {
+            // Standard / fallback triggers
+            fetch(`http://${savedIp}/control?pin=${pin.toLowerCase()}&val=${value}`, { mode: 'no-cors' }).catch(() => {});
+            fetch(`http://${savedIp}/set?pin=${pin.toLowerCase()}&val=${value}`, { mode: 'no-cors' }).catch(() => {});
+            fetch(`http://${savedIp}/api/update?${pin.toLowerCase()}=${value}`, { mode: 'no-cors' }).catch(() => {});
+            
+            // Custom triggers mapped specifically for the provided Device 7 ESP32 Code
+            if (esp32PinMapping) {
+              fetch(`http://${savedIp}/${esp32PinMapping}/${actionPath}`, { mode: 'no-cors' }).catch(() => {});
+            }
+          } catch (e) {
+            console.warn('Direct HTTP fetch blocked on strict HTTPS mobile browser', e);
           }
           
-          // Standard / fallback triggers
-          fetch(`http://${savedIp}/control?pin=${pin.toLowerCase()}&val=${value}`, { mode: 'no-cors' }).catch(() => {});
-          fetch(`http://${savedIp}/set?pin=${pin.toLowerCase()}&val=${value}`, { mode: 'no-cors' }).catch(() => {});
-          fetch(`http://${savedIp}/api/update?${pin.toLowerCase()}=${value}`, { mode: 'no-cors' }).catch(() => {});
-          
-          // Custom triggers mapped specifically for the provided Device 7 ESP32 Code
-          if (esp32PinMapping) {
-            fetch(`http://${savedIp}/${esp32PinMapping}/${actionPath}`, { mode: 'no-cors' }).catch(() => {});
-          }
-          
-        } catch (e) {}
+        } catch (e) {
+          console.warn('Direct LAN update outer block failed', e);
+        }
       }
 
       const res = await fetch(`/api/iot/update?token=${encodeURIComponent(token)}&pin=${encodeURIComponent(pin)}&value=${encodeURIComponent(value)}&ip=${encodeURIComponent(savedIp || '')}`);

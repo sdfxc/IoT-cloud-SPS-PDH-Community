@@ -122,7 +122,7 @@ export const BlynkDashboardEditor: React.FC<BlynkDashboardEditorProps> = ({
       ],
     },
     smart_farm: {
-      name: 'Smart Irrigation & Farm Automation',
+      name: 'Smart Agriculture & Farm Automation',
       widgets: [
         { id: 'w_pump', type: 'switch', title: 'Water Pump', titleKhmer: 'ម៉ូទ័របូមទឹក', pin: 'V0', color: '#10b981', widthCols: 1 },
         { id: 'w_moisture', type: 'label', title: 'Soil Moisture', titleKhmer: 'សំណើមដី', pin: 'V1', value: 88, unit: '%', color: '#06b6d4', widthCols: 1 },

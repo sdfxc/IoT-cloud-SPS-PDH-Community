@@ -106,7 +106,7 @@ export const SimulatorModal: React.FC<SimulatorModalProps> = ({
             </span>
             <span className="text-[11px] text-slate-400">
               {isSimulating
-                ? (lang === 'km' ? 'កំពុងបង្កើតទិន្នន័យ Sensor ធម្មជាតិរៀងរាល់ ២វិនាទី' : 'Simulating natural sensor fluctuations every 2000ms')
+                ? (lang === 'km' ? 'កំពុងបង្កើតទិន្នន័យ Sensor ធម្មជាតិរៀងរាល់ ១វិនាទី' : 'Simulating natural sensor fluctuations every 1000ms')
                 : (lang === 'km' ? 'បានផ្អាក — អ្នកអាចរំកិលដៃដោយផ្ទាល់' : 'Paused — manual slider control enabled')}
             </span>
           </div>

@@ -109,6 +109,6 @@ export interface DeviceLog {
   source: 'ESP32_FIRMWARE' | 'CLOUD_API' | 'AUTOMATION' | 'SIMULATOR' | 'TELEGRAM_BOT';
 }
 
-export type TimeFilter = 'live' | '1h' | '6h' | '1d' | '1w' | '1mo';
+export type TimeFilter = 'live' | '1h' | '3h' | '6h' | '12h' | '1d' | '3d' | '1w' | '1mo' | '1y';
 
 export type NavigationTab = 'dashboard' | 'widget_builder' | 'devices' | 'analytics' | 'automations' | 'logs' | 'firmware' | 'simulator';

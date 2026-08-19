@@ -165,7 +165,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
     if (dev.templateId === 'TMPL_SCHOOL_LIGHTS') {
       return [
-        { id: 'w_school', type: 'switch', title: 'School Light', titleKhmer: 'ភ្លើងសាលាសុវណ្ណភូមិផ្សារដីហុយ', pin: 'V1', color: '#f59e0b', widthCols: 1 },
+        { id: 'w_school', type: 'switch', title: 'Light School Phsar Dey Hoy', titleKhmer: 'ភ្លើងសាលាសុវណ្ណភូមិផ្សារដីហុយ', pin: 'V1', color: '#f59e0b', widthCols: 1 },
         { id: 'w_building', type: 'switch', title: 'Building Light', titleKhmer: 'ភ្លើងអគារ', pin: 'V2', color: '#3b82f6', widthCols: 1 },
         { id: 'w_playground', type: 'switch', title: 'Playground Light', titleKhmer: 'ភ្លើង Playground', pin: 'V3', color: '#10b981', widthCols: 1 },
       ];
@@ -244,9 +244,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const timeFilterOptions: { key: TimeFilter; label: string; labelKhmer: string }[] = [
     { key: 'live', label: 'Live', labelKhmer: 'ផ្ទាល់' },
     { key: '1h', label: '1h', labelKhmer: '១ ម៉ោង' },
+    { key: '3h', label: '3h', labelKhmer: '៣ ម៉ោង' },
     { key: '6h', label: '6h', labelKhmer: '៦ ម៉ោង' },
+    { key: '12h', label: '12h', labelKhmer: '១២ ម៉ោង' },
     { key: '1d', label: '1d', labelKhmer: '១ ថ្ងៃ' },
+    { key: '3d', label: '3d', labelKhmer: '៣ ថ្ងៃ' },
     { key: '1w', label: '1w', labelKhmer: '១ សប្តាហ៍' },
+    { key: '1mo', label: '1m', labelKhmer: '១ ខែ' },
+    { key: '1y', label: '1y', labelKhmer: '១ ឆ្នាំ' },
   ];
 
   return (
@@ -372,27 +377,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Time Filters Bar */}
-        <div className="flex items-center justify-between gap-3 pt-3 mt-3 border-t border-slate-200 dark:border-slate-800/80 overflow-x-auto">
-          <div className="flex items-center gap-1 text-xs">
-            {timeFilterOptions.map((opt) => (
-              <button
-                key={opt.key}
-                onClick={() => onTimeFilterChange(opt.key)}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
-                  timeFilter === opt.key
-                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800/50'
-                }`}
-              >
-                <span>{lang === 'km' ? opt.labelKhmer : opt.label}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="text-xs text-slate-500 dark:text-slate-400 font-mono font-semibold flex items-center gap-2 shrink-0">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>2000ms Sync</span>
-          </div>
+        <div className="flex items-center gap-1 text-xs pt-3 mt-3 border-t border-slate-200 dark:border-slate-800/80 overflow-x-auto no-scrollbar">
+          {timeFilterOptions.map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => onTimeFilterChange(opt.key)}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 shrink-0 ${
+                timeFilter === opt.key
+                  ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800/50'
+              }`}
+            >
+              <span>{lang === 'km' ? opt.labelKhmer : opt.label}</span>
+            </button>
+          ))}
         </div>
       </div>
 
@@ -519,25 +517,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="space-y-4">
               {/* Traffic Metrics Cards: Lamp, Parking, Road A, Road B, Street Light */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* 1. Lamp Switch */}
-                <SmartSwitch
-                  id="switch-traffic-lamp"
-                  title="Lamp / Traffic Light"
-                  titleKhmer="អំពូលភ្លើង (Lamp)"
-                  subtitle="Pin V0 • Traffic Controller"
-                  pinLabel="V0"
-                  isOn={Number(device.pins.V0?.value ?? 1) === 1}
-                  onToggle={() => onUpdatePin('V0', Number(device.pins.V0?.value ?? 1) === 1 ? 0 : 1)}
-                  variant="light"
-                  lang={lang}
-                />
-
                 {/* 2. Street Light Switch */}
                 <SmartSwitch
                   id="switch-traffic-street"
                   title="Street Light"
                   titleKhmer="ភ្លើងបំភ្លឺផ្លូវ (Street Light)"
-                  subtitle="Pin V4 • Solar Highway LED"
+                  subtitle="Solar Highway LED"
                   pinLabel="V4"
                   isOn={Number(device.pins.V4?.value ?? 1) === 1}
                   onToggle={() => onUpdatePin('V4', Number(device.pins.V4?.value ?? 1) === 1 ? 0 : 1)}
@@ -557,15 +542,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
                   <div className="my-3 flex items-baseline gap-2">
                     <span className="text-4xl sm:text-5xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight">
-                      {device.pins.V1?.value ?? 67}
+                      {device.pins.V1?.value ?? 3}
                     </span>
                     <span className="text-sm font-bold text-slate-500 dark:text-slate-400">
-                      {lang === 'km' ? 'កន្លែងទំនេរ' : 'Bays'}
+                      {lang === 'km' ? 'កន្លែងទំនេរ' : 'Vehicle'}
                     </span>
-                  </div>
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs text-slate-500">
-                    <span>{lang === 'km' ? 'សមត្ថភាពសរុប: ១០០' : 'Capacity: 100'}</span>
-                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">67% Available</span>
                   </div>
                 </div>
 
@@ -573,7 +554,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-xl flex flex-col justify-between">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                      {lang === 'km' ? 'រថយន្តលើផ្លូវ A' : 'Road A Flow'}
+                      {lang === 'km' ? 'រថយន្តលើផ្លូវ A' : 'Road A'}
                     </span>
                     <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-950 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-800">
                       V2
@@ -583,7 +564,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <span className="text-4xl sm:text-5xl font-black text-blue-600 dark:text-blue-400 font-mono tracking-tight">
                       {device.pins.V2?.value ?? 92}
                     </span>
-                    <span className="text-sm font-bold text-slate-500 dark:text-slate-400">Cars/min</span>
                   </div>
                   <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 text-xs text-blue-600 dark:text-blue-400 font-bold">
                     {lang === 'km' ? 'ចរាចរណ៍មធ្យម' : 'Normal Flow'}
@@ -594,7 +574,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-xl flex flex-col justify-between">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                      {lang === 'km' ? 'រថយន្តលើផ្លូវ B' : 'Road B Flow'}
+                      {lang === 'km' ? 'រថយន្តលើផ្លូវ B' : 'Road B'}
                     </span>
                     <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-950 text-purple-600 dark:text-purple-400 border border-slate-200 dark:border-slate-800">
                       V3
@@ -604,25 +584,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <span className="text-4xl sm:text-5xl font-black text-purple-600 dark:text-purple-400 font-mono tracking-tight">
                       {device.pins.V3?.value ?? 13}
                     </span>
-                    <span className="text-sm font-bold text-slate-500 dark:text-slate-400">Cars/min</span>
                   </div>
                   <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 text-xs text-purple-600 dark:text-purple-400 font-bold">
                     {lang === 'km' ? 'ចរាចរណ៍ស្រួល' : 'Free Flow'}
                   </div>
                 </div>
-
-                {/* 6. Auto Signal Control Switch */}
-                <SmartSwitch
-                  id="switch-traffic-auto"
-                  title="Auto Traffic Mode"
-                  titleKhmer="ប្រព័ន្ធស្វ័យប្រវត្តិ (Auto Mode)"
-                  subtitle="AI Adaptive Flow Timing"
-                  pinLabel="V6"
-                  isOn={Number(device.pins.V6?.value ?? 1) === 1}
-                  onToggle={() => onUpdatePin('V6', Number(device.pins.V6?.value ?? 1) === 1 ? 0 : 1)}
-                  variant="auto"
-                  lang={lang}
-                />
               </div>
 
               {/* Traffic Flow Telemetry Chart */}
@@ -646,17 +612,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   id="smart-bin-dual-level"
                   wetValue={Number(device.pins.V3?.value ?? 18)}
                   dryValue={Number(device.pins.V1?.value ?? 60)}
+                  isLidOpen={Number(device.pins.V0?.value ?? 0) === 1}
                   lang={lang}
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Trash Lid Smart Switch */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Bin Lid Smart Switch */}
                 <SmartSwitch
                   id="switch-bin-lid"
-                  title="Open Trash Lid"
+                  title="Open Bin Lid"
                   titleKhmer="បញ្ជាគម្របធុងសំរាម (Servo)"
-                  subtitle="Pin V0"
+                  subtitle=""
                   pinLabel="V0"
                   isOn={Number(device.pins.V0?.value ?? 0) === 1}
                   onToggle={() => onUpdatePin('V0', Number(device.pins.V0?.value ?? 0) === 1 ? 0 : 1)}
@@ -664,16 +631,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   lang={lang}
                 />
 
-                {/* UV Disinfection Switch */}
+                {/* Telegram Alert Mode */}
                 <SmartSwitch
-                  id="switch-bin-uv"
-                  title="UV-C Disinfection Lamp"
-                  titleKhmer="អំពូលកម្ចាត់មេរោគ (UV-C)"
-                  subtitle="Pin V3 • Sterilization Bulb"
-                  pinLabel="V3"
-                  isOn={Number(device.pins.V3?.value ?? 1) === 1}
-                  onToggle={() => onUpdatePin('V3', Number(device.pins.V3?.value ?? 1) === 1 ? 0 : 1)}
-                  variant="light"
+                  id="switch-bin-telegram"
+                  title="Telegram Notifications"
+                  titleKhmer="របៀបផ្ដល់ដំណឹង Telegram"
+                  subtitle=""
+                  pinLabel="V2"
+                  isOn={Number(device.pins.V2?.value ?? 1) === 1}
+                  onToggle={() => onUpdatePin('V2', Number(device.pins.V2?.value ?? 1) === 1 ? 0 : 1)}
+                  variant="telegram"
+                  lang={lang}
+                />
+
+                {/* Call Alert Mode */}
+                <SmartSwitch
+                  id="switch-bin-call"
+                  title="Phone Call Alert"
+                  titleKhmer="របៀបខលទូរស័ព្ទអាសន្ន"
+                  subtitle=""
+                  pinLabel="V5"
+                  isOn={Number(device.pins.V5?.value ?? 1) === 1}
+                  onToggle={() => onUpdatePin('V5', Number(device.pins.V5?.value ?? 1) === 1 ? 0 : 1)}
+                  variant="call"
                   lang={lang}
                 />
               </div>
@@ -789,21 +769,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           )) && (
             <div className="space-y-4">
               {/* Top Gauges & Telemetry Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Temperature Gauge */}
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-xl flex flex-col justify-between min-h-[220px]">
                   <RadialGauge
                     id="gauge-farm-temp"
-                    value={Number(device.pins.V0?.value ?? 29.4)}
+                    value={Number(device.pins.V2?.value ?? 29.4)}
                     min={15}
-                    max={45}
+                    max={60}
                     unit="°C"
-                    label="Atmospheric Temp"
-                    labelKhmer="សីតុណ្ហភាពបរិយាកាស"
+                    label="សីតុណ្ហភាពបរិយាកាស"
                     color="#f97316"
                     size={260}
-                    statusText="OPTIMAL / ល្អប្រសើរ"
-                    statusColor="#10b981"
                   />
                 </div>
 
@@ -821,6 +798,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     size={260}
                     statusText="92% WET / សើមគ្រប់គ្រាន់"
                     statusColor="#10b981"
+                  />
+                </div>
+
+                {/* Solar Angle Gauge */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-xl flex flex-col justify-between min-h-[220px]">
+                  <RadialGauge
+                    id="gauge-solar-angle"
+                    value={Number(device.pins.V7?.value ?? 145)}
+                    min={0}
+                    max={180}
+                    unit="°"
+                    label="មុំផ្ទាំងសូឡា"
+                    labelKhmer="Solar Angle Tracking"
+                    color="#f59e0b"
+                    size={260}
+                    icon={<Compass className="w-4 h-4" />}
                   />
                 </div>
 
@@ -847,13 +840,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
               </div>
 
-              {/* Actuators Row: Water Pump, Auto Mode, Grow Light */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Actuators Row: Water Pump, Auto Mode */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <SmartSwitch
                   id="switch-farm-pump"
-                  title="Water Pump Actuator"
+                  title="Water Pump"
                   titleKhmer="ម៉ូទ័របូមទឹកកសិកម្ម"
-                  subtitle="Pin V0 • High Pressure Solenoid"
+                  subtitle=""
                   pinLabel="V0"
                   isOn={Number(device.pins.V0?.value ?? 0) === 1}
                   onToggle={() => onUpdatePin('V0', Number(device.pins.V0?.value ?? 0) === 1 ? 0 : 1)}
@@ -865,23 +858,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   id="switch-farm-auto"
                   title="Auto Irrigation Mode"
                   titleKhmer="មុខងារស្រោចទឹកស្វ័យប្រវត្តិ"
-                  subtitle="Pin V3 • Sensor-Driven Trigger"
+                  subtitle=""
                   pinLabel="V3"
                   isOn={Number(device.pins.V3?.value ?? 1) === 1}
                   onToggle={() => onUpdatePin('V3', Number(device.pins.V3?.value ?? 1) === 1 ? 0 : 1)}
                   variant="auto"
-                  lang={lang}
-                />
-
-                <SmartSwitch
-                  id="switch-farm-light"
-                  title="Grow Light / Lamp"
-                  titleKhmer="អំពូលភ្លើងជំនួយពន្លឺ"
-                  subtitle="Pin V5 • Photosynthesis Spectrum"
-                  pinLabel="V5"
-                  isOn={Number(device.pins.V5?.value ?? 1) === 1}
-                  onToggle={() => onUpdatePin('V5', Number(device.pins.V5?.value ?? 1) === 1 ? 0 : 1)}
-                  variant="light"
                   lang={lang}
                 />
               </div>

@@ -23,11 +23,11 @@ interface SensorConfig {
 }
 
 const SENSORS: SensorConfig[] = [
-  { key: 'gasCo', label: 'CO Gas (V0)', labelKhmer: 'ឧស្ម័នពុល CO', unit: 'ppm', color: '#ef4444', minDomain: 0, maxDomain: 500 },
-  { key: 'airQualityMq135', label: 'MQ135 Gas (NH3/CO2)', labelKhmer: 'ផ្សែង/ឧស្ម័ន (MQ135)', unit: 'ppm', color: '#a855f7', minDomain: 50, maxDomain: 800 },
-  { key: 'waterLevel', label: 'Water Level (V2)', labelKhmer: 'កម្រិតនីវ៉ូទឹក', unit: '%', color: '#0ea5e9', minDomain: 0, maxDomain: 100 },
-  { key: 'airPressure', label: 'Air Pressure (V1)', labelKhmer: 'សម្ពាធបរិយាកាស', unit: 'kPa', color: '#10b981', minDomain: 90, maxDomain: 120 },
-  { key: 'ambientLight', label: 'Light (BH1750)', labelKhmer: 'ពន្លឺ (BH1750)', unit: 'lx', color: '#facc15', minDomain: 0, maxDomain: 2000 },
+  { key: 'gasCo', label: 'CO Gas', labelKhmer: 'ឧស្ម័នពុល CO', unit: 'ppm', color: '#ef4444', minDomain: 0, maxDomain: 500 },
+  { key: 'airQualityMq135', label: 'Gas (NH3/CO2)', labelKhmer: 'ផ្សែង/ឧស្ម័ន', unit: 'ppm', color: '#a855f7', minDomain: 50, maxDomain: 800 },
+  { key: 'waterLevel', label: 'Water Level', labelKhmer: 'កម្រិតនីវ៉ូទឹក', unit: '%', color: '#0ea5e9', minDomain: 0, maxDomain: 100 },
+  { key: 'airPressure', label: 'Air Pressure', labelKhmer: 'សម្ពាធបរិយាកាស', unit: 'kPa', color: '#10b981', minDomain: 90, maxDomain: 120 },
+  { key: 'ambientLight', label: 'Light', labelKhmer: 'ពន្លឺ', unit: 'lx', color: '#facc15', minDomain: 0, maxDomain: 2000 },
   { key: 'temperature', label: 'Temp', labelKhmer: 'សីតុណ្ហភាព', unit: '°C', color: '#f97316', minDomain: 15, maxDomain: 45 },
   { key: 'humidity', label: 'Humidity', labelKhmer: 'សំណើម', unit: '%', color: '#06b6d4', minDomain: 20, maxDomain: 100 },
   { key: 'soilMoisture', label: 'Soil Moist', labelKhmer: 'សំណើមដី', unit: '%', color: '#84cc16', minDomain: 10, maxDomain: 90 },
@@ -172,9 +172,14 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
   const timeFilterOptions: { key: TimeFilter; label: string; labelKhmer: string }[] = [
     { key: 'live', label: 'Live', labelKhmer: 'ផ្ទាល់' },
     { key: '1h', label: '1h', labelKhmer: '១ ម៉ោង' },
+    { key: '3h', label: '3h', labelKhmer: '៣ ម៉ោង' },
     { key: '6h', label: '6h', labelKhmer: '៦ ម៉ោង' },
+    { key: '12h', label: '12h', labelKhmer: '១២ ម៉ោង' },
     { key: '1d', label: '1d', labelKhmer: '១ ថ្ងៃ' },
+    { key: '3d', label: '3d', labelKhmer: '៣ ថ្ងៃ' },
     { key: '1w', label: '1w', labelKhmer: '១ សប្តាហ៍' },
+    { key: '1mo', label: '1m', labelKhmer: '១ ខែ' },
+    { key: '1y', label: '1y', labelKhmer: '១ ឆ្នាំ' },
   ];
 
   const hoveredPoint = hoverIndex !== null && points[hoverIndex] ? points[hoverIndex] : (points.length > 0 ? points[points.length - 1] : null);
@@ -189,20 +194,17 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
           </div>
           <div>
             <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              {lang === 'km' ? 'ក្រាបទិន្នន័យ Sensor Real-Time' : 'Real-Time Sensor Telemetry'}
+              {lang === 'km' ? 'Sensor ភ្លាមៗ (Real-Time)' : 'Real-Time Sensor'}
               <span className="flex h-2 w-2 relative">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              {lang === 'km' ? 'ធ្វើបច្ចុប្បន្នភាពផ្ទាល់រៀងរាល់ ២វិនាទីម្តង' : 'Syncing live telemetry every 2000ms'}
-            </p>
           </div>
         </div>
 
-        {/* Time Filter Bar (Live, 1h, 6h, 1d, 1w) */}
-        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950/80 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+        {/* Time Filter Bar (Live, 1h, 2h, 6h, 12h, 1d, 2d, 1w, 1m, 1y) */}
+        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950/80 p-1 rounded-xl border border-slate-200 dark:border-slate-800 overflow-x-auto max-w-full no-scrollbar">
           {timeFilterOptions.map(tf => (
             <button
               key={tf.key}

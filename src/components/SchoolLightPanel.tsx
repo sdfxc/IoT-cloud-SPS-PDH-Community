@@ -23,19 +23,19 @@ export const SchoolLightPanel: React.FC<SchoolLightPanelProps> = ({
   return (
     <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 md:p-10 shadow-sm dark:shadow-xl flex flex-col items-center w-full max-w-2xl mx-auto">
       <h2 className="text-2xl md:text-3xl font-black mb-8 text-slate-800 dark:text-white text-center">
-        {lang === 'km' ? 'ប្រព័ន្ធគ្រប់គ្រងភ្លើង' : 'School Light Controls'}
+        {lang === 'km' ? 'ប្រព័ន្ធគ្រប់គ្រងភ្លើង' : 'Light Control System'}
       </h2>
 
       {/* Status Row */}
       <div className="flex w-full justify-between items-center mb-6 max-w-[420px] px-2">
-        <div className="w-1/3 text-center text-sm md:text-base font-bold text-slate-900 dark:text-white">
+        <div className="w-1/3 text-center text-sm md:text-base font-bold text-slate-900 dark:text-white leading-tight">
           {lang === 'km' ? 'សាលា' : 'School'}: {v1On ? 'ON' : 'OFF'}
         </div>
         <div className="w-1/3 text-center text-sm md:text-base font-bold text-slate-900 dark:text-white">
           {lang === 'km' ? 'អគារ' : 'Building'}: {v2On ? 'ON' : 'OFF'}
         </div>
         <div className="w-1/3 text-center text-sm md:text-base font-bold text-slate-900 dark:text-white">
-          Playground: {v3On ? 'ON' : 'OFF'}
+          {lang === 'km' ? 'សួន' : 'Playground'}: {v3On ? 'ON' : 'OFF'}
         </div>
       </div>
 
@@ -80,7 +80,7 @@ export const SchoolLightPanel: React.FC<SchoolLightPanelProps> = ({
       {/* Labels Row */}
       <div className="flex w-full justify-between items-start mt-8 max-w-[420px] px-2">
         <div className="w-1/3 text-center text-[12px] md:text-sm font-bold text-slate-700 dark:text-slate-300 px-1 leading-relaxed">
-          {lang === 'km' ? 'ភ្លើងសាលាសុវណ្ណភូមិផ្សារដីហុយ' : 'School Light'}
+          {lang === 'km' ? 'ភ្លើងសាលាសុវណ្ណភូមិផ្សារដីហុយ' : 'Light School Phsar Dey Hoy'}
         </div>
         <div className="w-1/3 text-center text-[12px] md:text-sm font-bold text-slate-700 dark:text-slate-300 px-1 leading-relaxed">
           {lang === 'km' ? 'ភ្លើងអគារ' : 'Building Light'}

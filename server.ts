@@ -145,7 +145,7 @@ setInterval(() => {
       }
     }
 
-    // 3. Smart Irrigation simulation
+    // 3. Smart Agriculture simulation
     if (dev.templateId === 'TMPL_SMART_IRRIGATION' || dev.templateId === 'TMPL6BUNdn49f') {
       const pumpOn = Number(dev.pins.V0?.value) === 1;
       if (dev.pins.V1) {
@@ -159,8 +159,16 @@ setInterval(() => {
       }
       if (dev.pins.V2) {
         let temp = Number(dev.pins.V2.value);
-        temp += (Math.random() - 0.49) * 0.12;
-        dev.pins.V2.value = Number(Math.max(22, Math.min(38, temp)).toFixed(1));
+        temp += (Math.random() - 0.48) * 0.15;
+        dev.pins.V2.value = Number(Math.max(22, Math.min(55, temp)).toFixed(1));
+      }
+      if (dev.pins.V7) {
+        let angle = Number(dev.pins.V7.value);
+        let lux = Number(dev.pins.V4?.value ?? 500);
+        // Move angle towards 90 when light is peak, or just cycle it
+        const targetAngle = lux > 500 ? 145 : 45;
+        angle += (targetAngle - angle) * 0.05 + (Math.random() - 0.5) * 0.5;
+        dev.pins.V7.value = Number(Math.max(0, Math.min(180, angle)).toFixed(1));
       }
       if (dev.pins.V6) {
         let hum = Number(dev.pins.V6.value);
@@ -227,12 +235,12 @@ setInterval(() => {
 
     // 6. ESP32-C3 Smart Bin & Dual Switch & MQ-135 Air Quality (Dedicated Physical Device Sync)
     if (dev.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL') {
-      const dist = Number(dev.pins.V1?.value ?? 12.5);
-      // Strict ultrasonic calculation: 20cm=0%, 5cm=100%
+      const dist = Number(dev.pins.V1?.value ?? 10.0);
+      // Strict ultrasonic calculation: 15cm=0%, 5cm=100%
       let pct = 0;
-      if (dist >= 20.0) pct = 0;
+      if (dist >= 15.0) pct = 0;
       else if (dist <= 5.0) pct = 100;
-      else pct = Math.round(((20.0 - dist) / 15.0) * 100);
+      else pct = Math.round(((15.0 - dist) / 10.0) * 100);
 
       if (dev.pins.V0 && (dev.pins.V0.value === undefined || dev.pins.V0.value === null)) {
         dev.pins.V0.value = pct;

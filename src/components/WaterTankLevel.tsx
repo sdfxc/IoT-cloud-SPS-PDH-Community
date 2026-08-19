@@ -1,5 +1,6 @@
 import React from 'react';
 import { Droplets, AlertTriangle } from 'lucide-react';
+import { motion } from 'motion/react';
 
 interface WaterTankLevelProps {
   id?: string;
@@ -34,9 +35,9 @@ export const WaterTankLevel: React.FC<WaterTankLevelProps> = ({
   const isHighAlarm = percentage >= highAlarmThreshold;
 
   // Geometry for capsule tank
-  const capsuleWidth = 190;
-  const capsuleHeight = 240;
-  const cornerRadius = 32;
+  const capsuleWidth = 240;
+  const capsuleHeight = 320;
+  const cornerRadius = 40;
 
   // Liquid height
   const liquidHeight = Math.max(0, Math.min(capsuleHeight - 8, (percentage / 100) * (capsuleHeight - 8)));
@@ -77,11 +78,14 @@ export const WaterTankLevel: React.FC<WaterTankLevelProps> = ({
 
       {/* Main Tank Capsule Diagram (Direct translation of image.png) */}
       <div className="relative flex items-center justify-center py-2">
-        <div className="relative w-[190px] h-[240px] rounded-[32px] p-[3px] bg-gradient-to-b from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800 shadow-md flex items-center justify-center">
+        <div 
+          style={{ width: capsuleWidth, height: capsuleHeight }}
+          className="relative rounded-[42px] p-[3px] bg-gradient-to-b from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800 shadow-md flex items-center justify-center"
+        >
           {/* Inner Tank Capsule */}
-          <div className="relative w-full h-full rounded-[29px] overflow-hidden bg-slate-50 dark:bg-slate-900 border border-white/60 dark:border-slate-800 shadow-inner">
+          <div className="relative w-full h-full rounded-[39px] overflow-hidden bg-slate-50 dark:bg-slate-900 border border-white/60 dark:border-slate-800 shadow-inner">
             {/* Background Tick Marks (100%, 75%, 50%, 25%, 0%) on the Left */}
-            <div className="absolute left-3 top-0 bottom-0 flex flex-col justify-between py-6 z-10 pointer-events-none text-[11px] font-mono font-bold select-none text-slate-400 dark:text-slate-500">
+            <div className="absolute left-4 top-0 bottom-0 flex flex-col justify-between py-10 z-10 pointer-events-none text-[12px] font-mono font-bold select-none text-slate-400 dark:text-slate-500">
               <span className="opacity-90">100%</span>
               <span className="opacity-80">75%</span>
               <span className="opacity-80">50%</span>
@@ -90,8 +94,8 @@ export const WaterTankLevel: React.FC<WaterTankLevelProps> = ({
             </div>
 
             {/* Top SENSOR Pill Badge */}
-            <div className="absolute top-2.5 left-1/2 -translate-x-1/2 z-20">
-              <div className="bg-[#181d24] text-white text-[9px] font-bold tracking-wider px-3 py-1 rounded-full flex items-center gap-1 shadow-sm border border-slate-700/60">
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
+              <div className="bg-[#181d24] text-white text-[10px] font-bold tracking-wider px-4 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm border border-slate-700/60">
                 <span className="w-1.5 h-1.5 rounded-full bg-slate-500 border border-slate-400 inline-block" />
                 <span>ULTRASONIC</span>
               </div>
@@ -99,7 +103,7 @@ export const WaterTankLevel: React.FC<WaterTankLevelProps> = ({
 
             {/* Ultrasonic Radar Wave beneath Sensor */}
             <svg
-              className="absolute top-8 left-1/2 -translate-x-1/2 w-20 h-6 z-10 overflow-visible pointer-events-none"
+              className="absolute top-12 left-1/2 -translate-x-1/2 w-32 h-10 z-10 overflow-visible pointer-events-none"
               viewBox="0 0 80 24"
             >
               <path
@@ -128,7 +132,7 @@ export const WaterTankLevel: React.FC<WaterTankLevelProps> = ({
             >
               <defs>
                 <linearGradient id={`tankGradient-${id || 'def'}`} x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#06b6d4" />
+                  <stop offset="0%" stopColor="#0891b2" />
                   <stop offset="35%" stopColor="#0284c7" />
                   <stop offset="70%" stopColor="#1e3a8a" />
                   <stop offset="100%" stopColor="#0f172a" />
@@ -140,85 +144,106 @@ export const WaterTankLevel: React.FC<WaterTankLevelProps> = ({
               </defs>
 
               <g clipPath={`url(#capsuleClip-${id || 'def'})`}>
-                {/* Liquid Body */}
-                <rect
-                  x="0"
-                  y={liquidY}
-                  width={capsuleWidth}
-                  height={liquidHeight + 20}
-                  fill={`url(#tankGradient-${id || 'def'})`}
-                  className="transition-all duration-700 ease-out"
-                />
-
-                {/* Surface Highlight Wave */}
-                {percentage > 3 && (
-                  <path
-                    d={`M 0 ${liquidY} Q ${capsuleWidth * 0.25} ${liquidY - 3} ${capsuleWidth * 0.5} ${liquidY} T ${capsuleWidth} ${liquidY} L ${capsuleWidth} ${liquidY + 4} L 0 ${liquidY + 4} Z`}
-                    fill="#e0f2fe"
-                    opacity="0.75"
-                    className="transition-all duration-700 ease-out"
+                {/* Background Wave (Ocean Depth Effect) */}
+                {percentage > 0 && (
+                  <motion.path
+                    d={`M 0 ${liquidY} Q ${capsuleWidth * 0.25} ${liquidY - 8} ${capsuleWidth * 0.5} ${liquidY} T ${capsuleWidth} ${liquidY} L ${capsuleWidth} ${capsuleHeight} L 0 ${capsuleHeight} Z`}
+                    fill="#0369a1"
+                    opacity="0.3"
+                    animate={{
+                      d: [
+                        `M 0 ${liquidY} Q ${capsuleWidth * 0.25} ${liquidY - 8} ${capsuleWidth * 0.5} ${liquidY} T ${capsuleWidth} ${liquidY} L ${capsuleWidth} ${capsuleHeight} L 0 ${capsuleHeight} Z`,
+                        `M 0 ${liquidY} Q ${capsuleWidth * 0.25} ${liquidY + 8} ${capsuleWidth * 0.5} ${liquidY} T ${capsuleWidth} ${liquidY} L ${capsuleWidth} ${capsuleHeight} L 0 ${capsuleHeight} Z`,
+                        `M 0 ${liquidY} Q ${capsuleWidth * 0.25} ${liquidY - 8} ${capsuleWidth * 0.5} ${liquidY} T ${capsuleWidth} ${liquidY} L ${capsuleWidth} ${capsuleHeight} L 0 ${capsuleHeight} Z`,
+                      ]
+                    }}
+                    transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
                   />
                 )}
 
-                {/* Floating Translucent Bubbles */}
-                {percentage > 15 && (
+                {/* Liquid Body */}
+                <motion.rect
+                  x="0"
+                  y={liquidY}
+                  width={capsuleWidth}
+                  height={liquidHeight + 40}
+                  fill={`url(#tankGradient-${id || 'def'})`}
+                  initial={false}
+                  animate={{ y: liquidY, height: liquidHeight + 40 }}
+                  transition={{ duration: 0.8, ease: "circOut" }}
+                />
+
+                {/* Primary Animated Wave Surface */}
+                {percentage > 0 && (
+                  <motion.path
+                    d={`M 0 ${liquidY} Q ${capsuleWidth * 0.25} ${liquidY - 5} ${capsuleWidth * 0.5} ${liquidY} T ${capsuleWidth} ${liquidY} L ${capsuleWidth} ${liquidY + 20} L 0 ${liquidY + 20} Z`}
+                    fill={`url(#tankGradient-${id || 'def'})`}
+                    animate={{
+                      d: [
+                        `M 0 ${liquidY} Q ${capsuleWidth * 0.25} ${liquidY - 6} ${capsuleWidth * 0.5} ${liquidY} T ${capsuleWidth} ${liquidY} L ${capsuleWidth} ${liquidY + 20} L 0 ${liquidY + 20} Z`,
+                        `M 0 ${liquidY} Q ${capsuleWidth * 0.25} ${liquidY + 6} ${capsuleWidth * 0.5} ${liquidY} T ${capsuleWidth} ${liquidY} L ${capsuleWidth} ${liquidY + 20} L 0 ${liquidY + 20} Z`,
+                        `M 0 ${liquidY} Q ${capsuleWidth * 0.25} ${liquidY - 6} ${capsuleWidth * 0.5} ${liquidY} T ${capsuleWidth} ${liquidY} L ${capsuleWidth} ${liquidY + 20} L 0 ${liquidY + 20} Z`,
+                      ]
+                    }}
+                    transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+                  />
+                )}
+
+                {/* Surface Highlight Wave (Shimmer) */}
+                {percentage > 2 && (
+                  <motion.path
+                    d={`M 0 ${liquidY} Q ${capsuleWidth * 0.25} ${liquidY - 3} ${capsuleWidth * 0.5} ${liquidY} T ${capsuleWidth} ${liquidY} L ${capsuleWidth} ${liquidY + 3} L 0 ${liquidY + 3} Z`}
+                    fill="#bae6fd"
+                    opacity="0.5"
+                    animate={{
+                      x: [-capsuleWidth, 0, capsuleWidth],
+                      opacity: [0.3, 0.6, 0.3]
+                    }}
+                    transition={{ repeat: Infinity, duration: 5, ease: "linear" }}
+                  />
+                )}
+
+                {/* Floating Translucent Bubbles (Sea Life / Oxygen effect) */}
+                {percentage > 5 && (
                   <>
-                    <circle
-                      cx="55"
-                      cy={Math.min(capsuleHeight - 20, liquidY + liquidHeight * 0.8)}
-                      r="5"
-                      fill="#ffffff"
-                      opacity="0.4"
-                      className="animate-pulse"
-                    />
-                    <circle
-                      cx="135"
-                      cy={Math.min(capsuleHeight - 40, liquidY + liquidHeight * 0.55)}
-                      r="4"
-                      fill="#ffffff"
-                      opacity="0.35"
-                    />
-                    <circle
-                      cx="90"
-                      cy={Math.min(capsuleHeight - 25, liquidY + liquidHeight * 0.35)}
-                      r="3"
-                      fill="#ffffff"
-                      opacity="0.45"
-                    />
-                    <circle
-                      cx="30"
-                      cy={Math.min(capsuleHeight - 50, liquidY + liquidHeight * 0.45)}
-                      r="2.5"
-                      fill="#ffffff"
-                      opacity="0.3"
-                      className="animate-pulse"
-                    />
-                    <circle
-                      cx="160"
-                      cy={Math.min(capsuleHeight - 30, liquidY + liquidHeight * 0.7)}
-                      r="3.5"
-                      fill="#ffffff"
-                      opacity="0.4"
-                    />
-                    <circle
-                      cx="110"
-                      cy={Math.min(capsuleHeight - 60, liquidY + liquidHeight * 0.2)}
-                      r="2"
-                      fill="#ffffff"
-                      opacity="0.5"
-                    />
+                    {[...Array(10)].map((_, i) => (
+                      <motion.circle
+                        key={i}
+                        cx={20 + (i * 22) % (capsuleWidth - 40)}
+                        cy={capsuleHeight}
+                        r={1.5 + Math.random() * 3}
+                        fill="#ffffff"
+                        opacity={0.2 + Math.random() * 0.3}
+                        animate={{
+                          y: [capsuleHeight, liquidY],
+                          x: [20 + (i * 30) % (capsuleWidth - 40), 20 + (i * 30) % (capsuleWidth - 40) + (Math.random() - 0.5) * 20],
+                          opacity: [0.5, 0]
+                        }}
+                        transition={{
+                          repeat: Infinity,
+                          duration: 3 + Math.random() * 4,
+                          delay: Math.random() * 5,
+                          ease: "easeOut"
+                        }}
+                      />
+                    ))}
                   </>
                 )}
               </g>
             </svg>
 
-            {/* Central Frosted Glass Percentage Pill (Exactly like image.png) */}
+            {/* Central Frosted Glass Percentage Pill */}
             <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-              <div className="bg-white/40 dark:bg-slate-900/50 backdrop-blur-md border border-white/70 dark:border-white/20 shadow-lg rounded-2xl px-5 py-2.5 flex items-center justify-center transform transition-transform duration-300">
-                <span className="text-3xl font-black text-slate-900 dark:text-white tracking-tight drop-shadow-xs font-mono">
+              <motion.div 
+                initial={false}
+                animate={{ scale: [1, 1.02, 1] }}
+                transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
+                className="bg-white/40 dark:bg-slate-900/50 backdrop-blur-md border border-white/70 dark:border-white/20 shadow-lg rounded-2xl px-7 py-3.5 flex items-center justify-center transform"
+              >
+                <span className="text-4xl font-black text-slate-900 dark:text-white tracking-tight drop-shadow-xs font-mono">
                   {percentage}%
                 </span>
-              </div>
+              </motion.div>
             </div>
           </div>
         </div>

@@ -268,27 +268,49 @@ export const C3SmartBinDualPanel: React.FC<C3SmartBinDualPanelProps> = ({
             <span>Smart Bin Level</span>
           </h2>
 
-          {/* Bin Container */}
-          <div className="w-[120px] h-[160px] border-4 border-[#333333] rounded-[10px] my-3 relative bg-[#eeeeee] overflow-hidden flex items-end shadow-inner">
+          {/* Bin Container - Designed like sea water with ultrasonic sensor on top */}
+          <div className="w-[140px] h-[180px] border-l-4 border-r-4 border-b-4 border-[#333333] rounded-b-[10px] my-4 relative bg-[#e0f7fa] overflow-hidden flex flex-col shadow-inner">
+            {/* Ultrasonic Sensor Header (Top) */}
+            <div className="absolute top-0 left-0 right-0 h-4 bg-slate-800 flex items-center justify-around z-10 border-b border-slate-900">
+              {/* Ultrasonic eyes */}
+              <div className="w-2.5 h-2.5 rounded-full bg-slate-600 border border-slate-400"></div>
+              <div className="w-2.5 h-2.5 rounded-full bg-slate-600 border border-slate-400"></div>
+            </div>
+            
+            {/* Beam Ray visual from sensor down to water */}
+            <div 
+              className="absolute top-4 left-1/2 -translate-x-1/2 w-8 bg-sky-200/40 border-l border-r border-sky-300/30 border-dashed transition-all duration-500 z-0"
+              style={{
+                height: `${100 - Math.min(100, Math.max(0, fillLevel))}%`
+              }}
+            ></div>
+
+            <div className="flex-grow"></div>
+
+            {/* Sea Water Level */}
             <div
-              className="w-full transition-all duration-500 ease-out"
+              className="w-full relative transition-all duration-700 ease-in-out flex-shrink-0"
               style={{
                 height: `${Math.min(100, Math.max(0, fillLevel))}%`,
-                backgroundColor: getFillColor(fillLevel)
+                background: 'linear-gradient(180deg, #4dd0e1 0%, #00acc1 100%)',
+                boxShadow: 'inset 0 4px 6px -1px rgba(255, 255, 255, 0.4)'
               }}
-            />
+            >
+               {/* Animated Waves */}
+               <div className="absolute -top-1 left-0 right-0 h-2 bg-white/30 rounded-t-full opacity-60"></div>
+            </div>
           </div>
 
           {/* Level Info & Distance */}
           <div className="text-center w-full">
-            <div className="text-[22px] font-black text-[#222222] my-1">
-              {Math.round(fillLevel)}% Full
+            <div className="text-[24px] font-black text-[#00838f] my-1">
+              {Math.round(fillLevel)}%
             </div>
             <div className="text-[15px] font-semibold text-[#666666]">
-              Distance: <span className="font-bold text-sky-600">{distance.toFixed(1)}</span> cm
+              ជម្រៅ: <span className="font-bold text-sky-600">{distance.toFixed(1)}</span> cm
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              (Empty: 20cm = 0% • Full: 5cm = 100%)
+            <p className="text-[12px] font-bold text-slate-500 mt-2">
+              (15cm = 0% • 5cm = 100%)
             </p>
           </div>
         </div>

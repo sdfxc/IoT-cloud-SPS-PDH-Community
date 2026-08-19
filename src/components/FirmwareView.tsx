@@ -726,10 +726,10 @@ void loop() {
 }
 `;
 
-  // 4. Device 3: Smart Irrigation (ESP32 30-Pin)
+  // 4. Device 3: Smart Agriculture (ESP32 30-Pin)
   const esp32IrrigationCode = `/*
  * ==============================================================================
- * Project: Device 3 - Smart Irrigation on ESP32 30-Pin (Dual-Mode AP+STA)
+ * Project: Device 3 - Smart Agriculture on ESP32 30-Pin (Dual-Mode AP+STA)
  * Hardware: ESP32-WROOM-32D 30-Pin
  * Sensors: Soil Moisture (GPIO 35 ADC), DHT11 Temp/Humidity (GPIO 4), Solar Angle (GPIO 19)
  * Actuators: Water Pump Relay (GPIO 23)
@@ -738,7 +738,7 @@ void loop() {
  * ==============================================================================
  */
 #define BLYNK_TEMPLATE_ID    "TMPL6BUNdn49f"
-#define BLYNK_TEMPLATE_NAME  "Smart Irrigation"
+#define BLYNK_TEMPLATE_NAME  "Smart Agriculture"
 #define BLYNK_AUTH_TOKEN     "${blynkAuthToken}"
 
 #define BLYNK_PRINT Serial
@@ -786,12 +786,12 @@ void sendTelegramAlert(String message) {
 
 void handleRoot() {
   String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>";
-  html += "<title>Smart Irrigation Dashboard</title>";
+  html += "<title>Smart Agriculture Dashboard</title>";
   html += "<style>body{font-family:sans-serif;background:#0f172a;color:#fff;text-align:center;padding:20px;}";
   html += ".card{background:#1e293b;border-radius:16px;padding:20px;max-width:440px;margin:auto;}";
   html += ".btn{display:inline-block;padding:12px 24px;margin:6px;border-radius:10px;font-weight:bold;color:#fff;text-decoration:none;}";
   html += ".btn-pump{background:#0284c7;} .btn-off{background:#ef4444;}</style></head><body>";
-  html += "<div class='card'><h2>🌱 Smart Irrigation System</h2>";
+  html += "<div class='card'><h2>🌱 Smart Agriculture System</h2>";
   html += "<p style='color:#94a3b8;'>Dual-Mode: <b>192.168.0.169</b> + Home Wi-Fi</p>";
   html += "<p>Water Pump: " + String(pumpState ? "<b style='color:#38bdf8'>PUMPING (បើក)</b>" : "<b style='color:#ef4444'>OFF (បិទ)</b>") + "</p>";
   html += "<a href='/control?pin=v0&val=1' class='btn btn-pump'>🚰 បើកម៉ូទ័របូមទឹក (Pump ON)</a>";
@@ -858,7 +858,7 @@ void setup() {
   server.begin();
 
   timer.setInterval(3000L, checkSoil);
-  sendTelegramAlert("🚀 <b>[Smart Irrigation ESP32]</b> Online! IP: 192.168.0.169");
+  sendTelegramAlert("🚀 <b>[Smart Agriculture ESP32]</b> Online! IP: 192.168.0.169");
 }
 
 void loop() {
@@ -1626,10 +1626,10 @@ void loop() {
 `;
   const esp32SchoolLightsCode = `/*
  * ==============================================================================
- * Project: ESP32 30-Pin School Lights - Smart Relay System (Dual-Mode AP + Cloud STA)
+ * Project: ESP32 30-Pin sovannaphumi school Phsar Dey hoy Lights - Smart Relay System (Dual-Mode AP + Cloud STA)
  * Hardware: ESP32 30-Pin (WROOM-32D)
  * Wi-Fi: AP ("SmartBin-ESP32" 192.168.4.1) + STA ("\${wifiSsid}") with Cloud Polling Sync
- * Actuators: School Light (GPIO 19), Building Light (GPIO 21), Playground Light (GPIO 22)
+ * Actuators: Light sovannaphumi school Phsar Dey hoy (GPIO 19), Building Light (GPIO 21), Playground Light (GPIO 22)
  * Telegram Alerts: Bot "\${telegramBotToken}" -> Chat ID "\${telegramChatId}"
  * ==============================================================================
  */
@@ -1884,27 +1884,15 @@ void syncWithCloud() {
     if (httpCode == 200) {
       String payload = http.getString();
       
-      // Simple lightweight parsing to avoid heavy Json libraries
-      int v1Idx = payload.indexOf("\"v1\":");
-      if (v1Idx != -1) {
-        char v1Val = payload.charAt(v1Idx + 5);
-        if (v1Val == '1') digitalWrite(LED_SCHOOL_PIN, HIGH);
-        else if (v1Val == '0') digitalWrite(LED_SCHOOL_PIN, LOW);
-      }
+      // Robust JSON parsing (handles spaces or no spaces)
+      if (payload.indexOf("\"v1\":1") != -1 || payload.indexOf("\"v1\": 1") != -1) digitalWrite(LED_SCHOOL_PIN, HIGH);
+      else if (payload.indexOf("\"v1\":0") != -1 || payload.indexOf("\"v1\": 0") != -1) digitalWrite(LED_SCHOOL_PIN, LOW);
       
-      int v2Idx = payload.indexOf("\"v2\":");
-      if (v2Idx != -1) {
-        char v2Val = payload.charAt(v2Idx + 5);
-        if (v2Val == '1') digitalWrite(LED_BUILDING_PIN, HIGH);
-        else if (v2Val == '0') digitalWrite(LED_BUILDING_PIN, LOW);
-      }
+      if (payload.indexOf("\"v2\":1") != -1 || payload.indexOf("\"v2\": 1") != -1) digitalWrite(LED_BUILDING_PIN, HIGH);
+      else if (payload.indexOf("\"v2\":0") != -1 || payload.indexOf("\"v2\": 0") != -1) digitalWrite(LED_BUILDING_PIN, LOW);
       
-      int v3Idx = payload.indexOf("\"v3\":");
-      if (v3Idx != -1) {
-        char v3Val = payload.charAt(v3Idx + 5);
-        if (v3Val == '1') digitalWrite(LED_PLAYGROUND_PIN, HIGH);
-        else if (v3Val == '0') digitalWrite(LED_PLAYGROUND_PIN, LOW);
-      }
+      if (payload.indexOf("\"v3\":1") != -1 || payload.indexOf("\"v3\": 1") != -1) digitalWrite(LED_PLAYGROUND_PIN, HIGH);
+      else if (payload.indexOf("\"v3\":0") != -1 || payload.indexOf("\"v3\": 0") != -1) digitalWrite(LED_PLAYGROUND_PIN, LOW);
     }
     http.end();
   }
@@ -2553,7 +2541,7 @@ void loop() {
                     : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                 }`}
               >
-                🏫💡 Dev 7: ESP32 30-Pin School Lights
+                🏫💡 Dev 7: ESP32 30-Pin sovannaphumi school Phsar Dey hoy Lights
               </button>
               <button
                 onClick={() => handleTemplateChange('esp32c3_smartbin_dualwall')}
