@@ -27,7 +27,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: 'ppm',
         min: 0,
         max: 500,
-        value: 465,
+        value: 0,
         gpioPin: 34,
         color: '#ef4444',
         iconName: 'Wind'
@@ -40,7 +40,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: 'kPa',
         min: 0,
         max: 120,
-        value: 102.09,
+        value: 0,
         gpioPin: 21,
         color: '#06b6d4',
         iconName: 'Gauge'
@@ -53,7 +53,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: '%',
         min: 0,
         max: 100,
-        value: 18,
+        value: 0,
         gpioPin: 35,
         color: '#3b82f6',
         iconName: 'Droplets'
@@ -78,7 +78,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: '%',
         min: 0,
         max: 100,
-        value: 80,
+        value: 0,
         gpioPin: 19,
         color: '#3b82f6',
         iconName: 'Fan'
@@ -91,7 +91,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: 'ppm',
         min: 0,
         max: 1000,
-        value: 310,
+        value: 0,
         gpioPin: 32,
         color: '#a855f7',
         iconName: 'Activity'
@@ -116,7 +116,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: '°C',
         min: 0,
         max: 80,
-        value: 29.4,
+        value: 0,
         gpioPin: 4,
         color: '#f97316',
         iconName: 'Thermometer'
@@ -129,7 +129,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: 'V',
         min: 9,
         max: 15,
-        value: 12.6,
+        value: 0,
         gpioPin: 33,
         color: '#84cc16',
         iconName: 'Zap'
@@ -153,7 +153,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         type: 'generic',
         min: 0,
         max: 100,
-        value: 99,
+        value: 0,
         gpioPin: 18,
         color: '#10b981',
         iconName: 'Activity'
@@ -165,7 +165,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         type: 'relay',
         min: 0,
         max: 1,
-        value: 1,
+        value: 0,
         gpioPin: 15,
         color: '#10b981',
         iconName: 'Check'
@@ -178,7 +178,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: 'lx', 
         min: 0, 
         max: 65535, 
-        value: 120, 
+        value: 0, 
         gpioPin: 21,
         color: '#eab308', 
         iconName: 'Sun' 
@@ -226,7 +226,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: '%',
         min: 0,
         max: 100,
-        value: 60,
+        value: 0,
         gpioPin: 35,
         color: '#f97316',
         iconName: 'Activity'
@@ -238,7 +238,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         type: 'relay',
         min: 0,
         max: 1,
-        value: 1,
+        value: 0,
         gpioPin: 0,
         color: '#0284c7',
         iconName: 'Send'
@@ -251,7 +251,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: '%',
         min: 0,
         max: 100,
-        value: 18,
+        value: 0,
         gpioPin: 34,
         color: '#06b6d4',
         iconName: 'Droplets'
@@ -263,7 +263,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         type: 'relay',
         min: 0,
         max: 1,
-        value: 1,
+        value: 0,
         gpioPin: 0,
         color: '#f59e0b',
         iconName: 'Mail'
@@ -275,7 +275,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         type: 'relay',
         min: 0,
         max: 1,
-        value: 1,
+        value: 0,
         gpioPin: 0,
         color: '#10b981',
         iconName: 'Phone'
@@ -300,7 +300,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: 'ppm',
         min: 0,
         max: 500,
-        value: 120,
+        value: 0,
         gpioPin: 32,
         color: '#a855f7',
         iconName: 'Wind'
@@ -313,7 +313,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: '%',
         min: 0,
         max: 100,
-        value: 88,
+        value: 0,
         gpioPin: 33,
         color: '#84cc16',
         iconName: 'Zap'
@@ -342,120 +342,108 @@ export const INITIAL_DEVICES: IoTDevice[] = [
   {
     id: 'dev_smart_irrigation',
     name: 'Smart Agriculture',
-    nameKhmer: 'ប្រព័ន្ធកសិកម្មវៃឆ្លាត (Smart Agriculture)',
-    authToken: 'YFr7r30K8HV8rRQ7x59hYojzeU0m9wYs',
+    nameKhmer: 'កសិកម្មឌីជីថល',
+    authToken: '8928313450:AAEvmTZMGGDXRJZ-W1ZuE2vc5AlVSQ5oDbY',
     orgId: 'SPS-PEH Organization - 2620ST',
     templateId: 'TMPL6BUNdn49f',
     owner: 'SPS-PEH (you)',
     status: 'online',
-    ipAddress: '192.168.0.169',
+    ipAddress: '192.168.0.45',
     macAddress: '24:6F:28:B4:9C:88',
     rssi: -58,
-    firmwareVersion: 'v3.2.0 (Dual-Mode AP+STA)',
-    hardware: 'ESP32 30-Pin (WROOM-32D)',
+    firmwareVersion: 'v4.0.0 (Smart Agriculture Dual Mode)',
+    hardware: 'ESP32 (Agricultural Controller)',
     lastSeen: 'Just now',
-    lastUpdated: '22:15:10',
+    lastUpdated: '02:00:00',
     location: 'Agricultural Sector 4 - Farm Node',
     pins: {
       V0: {
         pin: 'V0',
-        label: 'Water_Pump',
-        labelKhmer: 'កុងតាក់ម៉ូទ័របូមទឹក (Water Pump)',
+        label: 'Agricultural Water Pump',
+        labelKhmer: 'ម៉ូទ័របូមទឹកកសិកម្ម',
         type: 'relay',
         min: 0,
         max: 1,
-        value: 1,
-        gpioPin: 23,
+        value: 0,
+        gpioPin: 18,
         color: '#10b981',
         iconName: 'Power'
       },
       V1: {
         pin: 'V1',
-        label: 'សំណើមដី',
-        labelKhmer: 'សំណើមក្នុងដី (Soil Moisture)',
+        label: 'Soil Moisture',
+        labelKhmer: 'សំណើមដី (Soil Moisture)',
         type: 'sensor_soil',
         unit: '%',
         min: 0,
         max: 100,
-        value: 92,
-        gpioPin: 35,
-        color: '#06b6d4',
+        value: 0,
+        gpioPin: 34,
+        color: '#10b981',
         iconName: 'Droplets'
       },
       V2: {
         pin: 'V2',
-        label: 'សីតុណ្ហភាពបរិយាកាស',
-        labelKhmer: 'សីតុណ្ហភាពបរិយាកាស (Temp)',
+        label: 'Atmospheric Temperature',
+        labelKhmer: 'សីតុណ្ហភាពបរិយាកាស',
         type: 'sensor_temperature',
         unit: '°C',
-        min: 0,
+        min: 15,
         max: 60,
-        value: 28.6,
-        gpioPin: 4,
+        value: 0,
+        gpioPin: 19,
         color: '#f97316',
         iconName: 'Thermometer'
       },
       V3: {
         pin: 'V3',
-        label: 'Auto_Mode_Pump',
-        labelKhmer: 'របៀបស្វ័យប្រវត្ត (Auto Mode)',
+        label: 'Auto Irrigation Mode',
+        labelKhmer: 'មុខងារស្រោចទឹកស្វ័យប្រវត្តិ',
         type: 'relay',
         min: 0,
         max: 1,
-        value: 1,
+        value: 0,
         gpioPin: 0,
         color: '#3b82f6',
         iconName: 'Sliders'
       },
       V4: {
         pin: 'V4',
-        label: 'Ambient Light',
-        labelKhmer: 'កម្រិតពន្លឺ (Ambient Light)',
+        label: 'Solar Light Level',
+        labelKhmer: 'កម្រិតពន្លឺព្រះអាទិត្យ',
         type: 'sensor_light',
-        unit: 'lx',
+        unit: 'Lux',
         min: 0,
-        max: 1000,
-        value: 6,
+        max: 50000,
+        value: 0,
         gpioPin: 32,
-        color: '#eab308',
+        color: '#f59e0b',
         iconName: 'Sun'
       },
-      V5: {
-        pin: 'V5',
-        label: 'ការលូតលាស់ទឹកពីដី',
-        labelKhmer: 'ស្ថានភាពលំហូរទឹកពីដី',
-        type: 'generic',
-        unit: '',
-        min: 0,
-        max: 10,
-        value: 1,
-        gpioPin: 33,
-        color: '#10b981',
-        iconName: 'Sprout'
-      },
+      V5: { pin: 'V5', label: 'Aux 1', labelKhmer: 'ជំនួយ', type: 'generic', min: 0, max: 100, value: 0, color: '#64748b', iconName: 'Cpu' },
       V6: {
         pin: 'V6',
-        label: 'សំណើមបរិយាកាស',
+        label: 'Air Humidity',
         labelKhmer: 'សំណើមបរិយាកាស (Humidity)',
         type: 'sensor_humidity',
         unit: '%',
         min: 0,
         max: 100,
-        value: 68.4,
-        gpioPin: 4,
+        value: 0,
+        gpioPin: 19,
         color: '#06b6d4',
         iconName: 'Droplets'
       },
       V7: {
         pin: 'V7',
-        label: 'Solar_Angle',
-        labelKhmer: 'មុំផ្ទាំងសូឡា (Solar Angle)',
+        label: 'Solar Angle Tracking',
+        labelKhmer: 'មុំផ្ទាំងសូឡា',
         type: 'generic',
         unit: '°',
         min: 0,
-        max: 150,
-        value: 145,
-        gpioPin: 19,
+        max: 180,
+        value: 90,
+        gpioPin: 26,
         color: '#f59e0b',
         iconName: 'Compass'
       },
@@ -518,7 +506,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         type: 'relay',
         min: 0,
         max: 1,
-        value: 1,
+        value: 0,
         gpioPin: 22,
         color: '#eab308',
         iconName: 'Lightbulb'
@@ -526,78 +514,68 @@ export const INITIAL_DEVICES: IoTDevice[] = [
       V1: {
         pin: 'V1',
         label: 'Parking count',
-        labelKhmer: 'ចំនួនចំណតទំនេរ (Parking Count)',
+        labelKhmer: 'ចំណតយានយន្ត',
         type: 'counter',
-        unit: 'spots',
+        unit: 'កន្លែងទំនេរ',
         min: 0,
         max: 50,
-        value: 3,
+        value: 0,
         gpioPin: 35,
         color: '#10b981',
         iconName: 'Layers'
       },
       V2: {
         pin: 'V2',
-        label: 'Road A Car',
-        labelKhmer: 'រថយន្តលើផ្លូវ A (Road A)',
+        label: 'Road A Vehicles',
+        labelKhmer: 'យាន្តជំនិះលើផ្លូវA',
         type: 'counter',
-        unit: 'cars',
+        unit: 'យាន្តជំនិះ',
         min: 0,
         max: 100,
-        value: 4,
+        value: 0,
         gpioPin: 34,
         color: '#3b82f6',
         iconName: 'Car'
       },
       V3: {
         pin: 'V3',
-        label: 'Road B Car',
-        labelKhmer: 'រថយន្តលើផ្លូវ B (Road B)',
+        label: 'Road B Vehicles',
+        labelKhmer: 'យាន្តជំនិះលើផ្លូវB',
         type: 'counter',
-        unit: 'cars',
+        unit: 'យាន្តជំនិះ',
         min: 0,
         max: 100,
-        value: 4,
+        value: 0,
         gpioPin: 32,
         color: '#8b5cf6',
         iconName: 'Car'
       },
-      V4: {
-        pin: 'V4',
-        label: 'Street Light',
-        labelKhmer: 'ភ្លើងបំភ្លឺផ្លូវ (Street Light)',
-        type: 'relay',
-        min: 0,
-        max: 1,
-        value: 1,
-        gpioPin: 23,
-        color: '#f59e0b',
-        iconName: 'Power'
-      },
+      V4: { pin: 'V4', label: 'Aux', labelKhmer: 'ជំនួយ', type: 'generic', min: 0, max: 100, value: 0, color: '#64748b', iconName: 'Cpu' },
       V5: {
         pin: 'V5',
-        label: 'Traffic Phase',
-        labelKhmer: 'ដំណាក់កាលភ្លើងចរាចរណ៍',
-        type: 'generic',
-        unit: '',
-        min: 1,
-        max: 3,
-        value: 1,
+        label: 'Road C Vehicles',
+        labelKhmer: 'យាន្តជំនិះលើផ្លូវC',
+        type: 'counter',
+        unit: 'យាន្តជំនិះ',
+        min: 0,
+        max: 100,
+        value: 0,
         gpioPin: 19,
         color: '#10b981',
-        iconName: 'Activity'
+        iconName: 'Car'
       },
       V6: {
         pin: 'V6',
-        label: 'Gate Barrier Servo',
-        labelKhmer: 'របាំងបិទបើកច្រកទ្វារ',
-        type: 'relay',
+        label: 'Road D Vehicles',
+        labelKhmer: 'យាន្តជំនិះលើផ្លូវD',
+        type: 'counter',
+        unit: 'យាន្តជំនិះ',
         min: 0,
-        max: 1,
+        max: 100,
         value: 0,
         gpioPin: 18,
         color: '#06b6d4',
-        iconName: 'Sliders'
+        iconName: 'Car'
       },
       V7: {
         pin: 'V7',
@@ -607,7 +585,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: 'ppm',
         min: 0,
         max: 500,
-        value: 195,
+        value: 0,
         gpioPin: 33,
         color: '#a855f7',
         iconName: 'Wind'
@@ -632,7 +610,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: 'V',
         min: 180,
         max: 250,
-        value: 226.5,
+        value: 0,
         gpioPin: 36,
         color: '#84cc16',
         iconName: 'Zap'
@@ -671,7 +649,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: '%',
         min: 0,
         max: 100,
-        value: 45,
+        value: 0,
         gpioPin: 2,
         color: '#10b981',
         iconName: 'Trash2'
@@ -684,7 +662,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: 'cm',
         min: 0,
         max: 30,
-        value: 12.5,
+        value: 0,
         gpioPin: 3,
         color: '#06b6d4',
         iconName: 'Activity'
@@ -721,7 +699,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: 'PPM',
         min: 0,
         max: 1000,
-        value: 95,
+        value: 0,
         gpioPin: 0,
         color: '#10b981',
         iconName: 'Wind'
@@ -758,7 +736,7 @@ export const INITIAL_DEVICES: IoTDevice[] = [
         unit: '°C',
         min: 0,
         max: 80,
-        value: 34.2,
+        value: 0,
         color: '#f97316',
         iconName: 'Thermometer'
       },
@@ -913,37 +891,20 @@ export function generateInitialTelemetryHistory(count = 30): TelemetryPoint[] {
   const now = Date.now();
   const stepMs = 2000; // 2s steps for real-time fidelity
 
-  let baseTemp = 28.2;
-  let baseHum = 67.5;
-  let baseGas = 320;
-  let baseSoil = 54.0;
-  let baseFan = 75;
-
   for (let i = count; i >= 0; i--) {
     const time = now - i * stepMs;
     const dateObj = new Date(time);
     const timeStr = dateObj.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    // gentle realistic walk
-    baseTemp += (Math.random() - 0.48) * 0.15;
-    baseHum += (Math.random() - 0.5) * 0.3;
-    baseGas += (Math.random() - 0.49) * 4;
-    baseSoil += (Math.random() - 0.51) * 0.1;
-
-    baseTemp = Math.max(22, Math.min(36, baseTemp));
-    baseHum = Math.max(45, Math.min(85, baseHum));
-    baseGas = Math.max(180, Math.min(650, baseGas));
-    baseSoil = Math.max(30, Math.min(80, baseSoil));
-
     points.push({
       timestamp: time,
       timeStr,
-      temperature: Number(baseTemp.toFixed(1)),
-      humidity: Number(baseHum.toFixed(1)),
-      gasCo: Math.round(baseGas),
-      soilMoisture: Number(baseSoil.toFixed(1)),
-      fanSpeed: baseFan,
-      relay1: 1,
+      temperature: 0,
+      humidity: 0,
+      gasCo: 0,
+      soilMoisture: 0,
+      fanSpeed: 0,
+      relay1: 0,
       relay2: 0,
     });
   }

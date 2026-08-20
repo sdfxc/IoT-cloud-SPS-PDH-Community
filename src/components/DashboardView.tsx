@@ -148,16 +148,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (dev.templateId === 'TMPL_TRAFFIC_PARKING') {
       return [
         { id: 'w_lamp', type: 'switch', title: 'Lamp', titleKhmer: 'អំពូលភ្លើង (Lamp)', pin: 'V0', color: '#10b981', widthCols: 1 },
-        { id: 'w_parking', type: 'label', title: 'Parking count', titleKhmer: 'ចំនួនចំណតយានយន្ត', pin: 'V1', value: 67, unit: 'Bays', color: '#10b981', widthCols: 1 },
-        { id: 'w_road_a', type: 'label', title: 'Road A Car', titleKhmer: 'រថយន្តលើផ្លូវ A', pin: 'V2', value: 92, unit: 'Cars', color: '#3b82f6', widthCols: 1 },
-        { id: 'w_road_b', type: 'label', title: 'Road B Car', titleKhmer: 'រថយន្តលើផ្លូវ B', pin: 'V3', value: 13, unit: 'Cars', color: '#8b5cf6', widthCols: 1 },
-        { id: 'w_street', type: 'switch', title: 'Street Light', titleKhmer: 'ភ្លើងបំភ្លឺផ្លូវ', pin: 'V4', color: '#f59e0b', widthCols: 1 },
+        { id: 'w_parking', type: 'label', title: 'Parking', titleKhmer: 'ចំណតយានយន្ត', pin: 'V1', value: 0, unit: 'កន្លែងទំនេរ', color: '#10b981', widthCols: 1 },
+        { id: 'w_road_a', type: 'label', title: 'Road A Vehicles', titleKhmer: 'យាន្តជំនិះលើផ្លូវA', pin: 'V2', value: 0, unit: 'យាន្តជំនិះ', color: '#3b82f6', widthCols: 1 },
+        { id: 'w_road_b', type: 'label', title: 'Road B Vehicles', titleKhmer: 'យាន្តជំនិះលើផ្លូវB', pin: 'V3', value: 0, unit: 'យាន្តជំនិះ', color: '#8b5cf6', widthCols: 1 },
+        { id: 'w_road_c', type: 'label', title: 'Road C Vehicles', titleKhmer: 'យាន្តជំនិះលើផ្លូវC', pin: 'V5', value: 0, unit: 'យាន្តជំនិះ', color: '#10b981', widthCols: 1 },
+        { id: 'w_road_d', type: 'label', title: 'Road D Vehicles', titleKhmer: 'យាន្តជំនិះលើផ្លូវD', pin: 'V6', value: 0, unit: 'យាន្តជំនិះ', color: '#06b6d4', widthCols: 1 },
       ];
     }
     if (dev.templateId === 'TMPL_ESP32C3_SMART_BIN_DUAL') {
       return [
         { id: 'w_bin_level', type: 'water_tank', title: 'Smart Bin Level', titleKhmer: 'កម្រិតសំរាមក្នុងធុង', pin: 'V0', min: 0, max: 100, unit: '%', color: '#10b981', widthCols: 1 },
-        { id: 'w_dist', type: 'label', title: 'Ultrasonic Distance', titleKhmer: 'ចម្ងាយ (HC-SR04)', pin: 'V1', value: 12.5, unit: 'cm', color: '#06b6d4', widthCols: 1 },
+        { id: 'w_dist', type: 'label', title: 'Ultrasonic Distance', titleKhmer: 'ចម្ងាយ (HC-SR04)', pin: 'V1', value: 0, unit: 'cm', color: '#06b6d4', widthCols: 1 },
         { id: 'w_sw1', type: 'switch', title: 'SWITCH 1 (LED 1)', titleKhmer: 'កុងតាក់ ១ (LED 1)', pin: 'V2', color: '#eab308', widthCols: 1 },
         { id: 'w_sw2', type: 'switch', title: 'SWITCH 2 (LED 2)', titleKhmer: 'កុងតាក់ ២ (LED 2)', pin: 'V3', color: '#f59e0b', widthCols: 1 },
         { id: 'w_tg_alert', type: 'label', title: 'Telegram Alert', titleKhmer: 'Telegram Alert', pin: 'V4', value: 0, unit: 'Status', color: '#0ea5e9', widthCols: 1 },
@@ -173,9 +174,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     // Default / ESP32-CAM / Smart Farm
     return [
       { id: 'w_pump', type: 'switch', title: 'Water Pump / Actuator', titleKhmer: 'ម៉ូទ័របូមទឹក / Relay', pin: 'V0', color: '#10b981', widthCols: 1 },
-      { id: 'w_moist', type: 'label', title: 'Soil Moisture', titleKhmer: 'សំណើមដី', pin: 'V1', value: 92, unit: '%', color: '#06b6d4', widthCols: 1 },
+      { id: 'w_moist', type: 'label', title: 'Soil Moisture', titleKhmer: 'សំណើមដី', pin: 'V1', value: 0, unit: '%', color: '#06b6d4', widthCols: 1 },
       { id: 'w_temp', type: 'gauge', title: 'Atmospheric Temp', titleKhmer: 'សីតុណ្ហភាពបរិយាកាស', pin: 'V2', min: 0, max: 60, unit: '°C', color: '#f97316', widthCols: 1 },
-      { id: 'w_light', type: 'label', title: 'Ambient Light', titleKhmer: 'ពន្លឺបរិយាកាស', pin: 'V4', value: 6, unit: 'lx', color: '#eab308', widthCols: 1 },
+      { id: 'w_light', type: 'label', title: 'Ambient Light', titleKhmer: 'ពន្លឺបរិយាកាស', pin: 'V4', value: 0, unit: 'lx', color: '#eab308', widthCols: 1 },
       { id: 'w_auto', type: 'switch', title: 'Auto Mode', titleKhmer: 'មុខងារស្វ័យប្រវត្តិ', pin: 'V3', color: '#3b82f6', widthCols: 1 },
     ];
   };
@@ -767,7 +768,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             device.templateId !== 'TMPL_ESP32C3_SMART_BIN_DUAL' &&
             device.templateId !== 'TMPL_SCHOOL_LIGHTS'
           )) && (
-            <div className="space-y-4">
+            <div className="space-y-6 pt-4">
+              {/* Custom Header for Smart Agriculture */}
+              {device.id === 'dev_smart_irrigation' && (
+                <div className="text-center space-y-2 mb-8 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <h1 className="text-3xl md:text-4xl font-black text-emerald-600 dark:text-emerald-500 font-sans tracking-tight">
+                    {lang === 'km' ? 'កសិកម្មឌីជីថល' : 'Smart Digital Agriculture'}
+                  </h1>
+                  <p className="text-lg md:text-xl font-bold text-slate-600 dark:text-slate-400">
+                    {lang === 'km' ? 'ប្រព័ន្ធ Smart Agriculture ( Smart Irrigation, Smart Solar Tracking )' : 'Smart Agriculture System ( Irrigation & Solar Tracking )'}
+                  </p>
+                  <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-sm font-black border border-emerald-200 dark:border-emerald-800/50 mt-2">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    {lang === 'km' ? 'ONLINE MODE (ភ្ជាប់អ៊ីនធឺណិត)' : 'ONLINE MODE (Internet Connected)'}
+                  </div>
+                </div>
+              )}
+
               {/* Top Gauges & Telemetry Stats */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Temperature Gauge */}
@@ -778,38 +795,56 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     min={15}
                     max={60}
                     unit="°C"
-                    label="សីតុណ្ហភាពបរិយាកាស"
+                    label={lang === 'km' ? 'សីតុណ្ហភាពបរិយាកាស' : 'Ambient Temperature'}
                     color="#f97316"
                     size={260}
                   />
                 </div>
 
                 {/* Soil Moisture Gauge */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-xl flex flex-col justify-between min-h-[220px]">
-                  <RadialGauge
-                    id="gauge-farm-soil"
-                    value={Number(device.pins.V1?.value ?? 92)}
-                    min={0}
-                    max={100}
-                    unit="%"
-                    label="Soil Moisture"
-                    labelKhmer="សំណើមដី (Soil Moisture)"
-                    color="#10b981"
-                    size={260}
-                    statusText="92% WET / សើមគ្រប់គ្រាន់"
-                    statusColor="#10b981"
-                  />
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-xl flex flex-col justify-between min-h-[220px] relative overflow-hidden">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-bold text-slate-800 dark:text-white leading-tight">Soil Moisture</h3>
+                      <p className="text-[10px] text-slate-500 font-bold">{lang === 'km' ? 'សំណើមដី (Soil Moisture)' : 'Soil Humidity'}</p>
+                    </div>
+                    {Number(device.pins.V1?.value ?? 0) < 30 ? (
+                      <span className="bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 text-[10px] font-black px-2 py-1 rounded-lg border border-rose-100 dark:border-rose-800 animate-pulse">
+                        {lang === 'km' ? 'ដីស្ងួតខ្លាំង' : 'CRITICAL DRY'}
+                      </span>
+                    ) : Number(device.pins.V1?.value ?? 0) < 60 ? (
+                      <span className="bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-[10px] font-black px-2 py-1 rounded-lg border border-amber-100 dark:border-amber-800">
+                        {lang === 'km' ? 'សំណើមមធ្យម' : 'MEDIUM MOIST'}
+                      </span>
+                    ) : (
+                      <span className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 text-[10px] font-black px-2 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800">
+                        {lang === 'km' ? 'សើមគ្រប់គ្រាន់' : 'GOOD MOIST'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex justify-center -mt-4">
+                    <RadialGauge
+                      id="gauge-farm-soil"
+                      value={Number(device.pins.V1?.value ?? 0)}
+                      min={0}
+                      max={100}
+                      unit="%"
+                      label=""
+                      color="#10b981"
+                      size={260}
+                    />
+                  </div>
                 </div>
 
                 {/* Solar Angle Gauge */}
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-xl flex flex-col justify-between min-h-[220px]">
                   <RadialGauge
                     id="gauge-solar-angle"
-                    value={Number(device.pins.V7?.value ?? 145)}
+                    value={Number(device.pins.V7?.value ?? 90)}
                     min={0}
                     max={180}
                     unit="°"
-                    label="មុំផ្ទាំងសូឡា"
+                    label={lang === 'km' ? 'មុំផ្ទាំងសូឡា' : 'Solar Panel Angle'}
                     labelKhmer="Solar Angle Tracking"
                     color="#f59e0b"
                     size={260}
@@ -829,13 +864,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
                   <div className="my-3 flex items-baseline gap-2">
                     <span className="text-4xl sm:text-5xl font-black text-amber-500 dark:text-amber-400 font-mono tracking-tight">
-                      {device.pins.V4?.value ?? 680}
+                      {device.pins.V4?.value ?? 0}
                     </span>
                     <span className="text-sm font-bold text-slate-500 dark:text-slate-400">Lux</span>
                   </div>
                   <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs text-slate-500">
-                    <span>{lang === 'km' ? 'ពេលថ្ងៃ' : 'Daylight Condition'}</span>
-                    <span className="text-amber-600 dark:text-amber-400 font-bold">Good Light</span>
+                    <span>{lang === 'km' ? 'ស្ថានភាពពន្លឺ' : 'Light Condition'}</span>
+                    <span className="text-amber-600 dark:text-amber-400 font-bold">
+                      {Number(device.pins.V4?.value ?? 0) > 20000 ? (lang === 'km' ? 'ពន្លឺខ្លាំង' : 'Strong Light') :
+                       Number(device.pins.V4?.value ?? 0) > 1000 ? (lang === 'km' ? 'ពន្លឺល្អ' : 'Good Light') :
+                       (lang === 'km' ? 'ពន្លឺខ្សោយ' : 'Low Light')}
+                    </span>
                   </div>
                 </div>
               </div>

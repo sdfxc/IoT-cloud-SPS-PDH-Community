@@ -8,6 +8,7 @@ import {
   Wifi,
   Radio,
   Cpu,
+  Zap,
   Play,
   Pause,
   QrCode,
@@ -190,17 +191,28 @@ export const TopNav: React.FC<TopNavProps> = ({
           <button
             id="simulation-toggle-btn"
             onClick={onToggleSimulation}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black border transition-all duration-300 shadow-sm cursor-pointer ${
               isSimulating
-                ? 'bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25'
-                : 'bg-slate-100 dark:bg-slate-800/80 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                ? 'bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/25'
+                : 'bg-emerald-500 text-white border-emerald-400 dark:border-emerald-600 shadow-emerald-500/30'
             }`}
-            title={isSimulating ? 'Pause ESP32 Simulator' : 'Start ESP32 Simulator'}
+            title={isSimulating ? 'Switch to Real ESP32 Mode' : 'Switch to Simulation Mode'}
           >
-            {isSimulating ? <Pause className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" /> : <Play className="w-3.5 h-3.5 text-slate-500" />}
-            <span className="hidden sm:inline">
-              {isSimulating ? (lang === 'km' ? 'ESP32 Sim' : 'Sim: Active') : (lang === 'km' ? 'ESP32 Sim: ផ្អាក' : 'Sim: Paused')}
-            </span>
+            {isSimulating ? (
+              <>
+                <Pause className="w-3.5 h-3.5 animate-pulse" />
+                <span className="hidden sm:inline">
+                  {lang === 'km' ? 'តេស្ត (Sim)' : 'SIMULATION'}
+                </span>
+              </>
+            ) : (
+              <>
+                <Zap className="w-3.5 h-3.5 fill-white" />
+                <span className="hidden sm:inline">
+                  {lang === 'km' ? 'ដំណើរការពិត (Real)' : 'REAL MODE'}
+                </span>
+              </>
+            )}
           </button>
 
           {/* Open Interactive Simulator Hardware Bench */}

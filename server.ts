@@ -1,15 +1,30 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
+import admin from 'firebase-admin';
 import { INITIAL_DEVICES, INITIAL_AUTOMATIONS, generateInitialTelemetryHistory, INITIAL_LOGS } from './src/data/initialData';
 import { IoTDevice, VirtualPinId, TelemetryPoint, DeviceLog, AutomationRule } from './src/types';
+
+// Initialize Firebase Admin
+if (admin.apps && !admin.apps.length) {
+  try {
+    admin.initializeApp({
+      credential: admin.credential.applicationDefault(),
+    });
+    console.log('✅ Firebase Admin initialized');
+  } catch (error) {
+    console.error('❌ Firebase Admin initialization failed:', error);
+  }
+}
+
+const db = (admin.apps && admin.apps.length) ? admin.firestore() : null;
 
 // In-memory persistent database across live session
 let devices: IoTDevice[] = JSON.parse(JSON.stringify(INITIAL_DEVICES));
 let automations: AutomationRule[] = JSON.parse(JSON.stringify(INITIAL_AUTOMATIONS));
 let telemetryHistory: TelemetryPoint[] = generateInitialTelemetryHistory(40);
 let logs: DeviceLog[] = JSON.parse(JSON.stringify(INITIAL_LOGS));
-let isSimulating = true;
+let isSimulating = false;
 let sseClients: Response[] = [];
 const manualPinOverrides = new Map<string, number>(); // key: deviceId:pin -> timestamp
 
@@ -275,6 +290,17 @@ setInterval(() => {
 
     evaluateAutomations(dev);
 
+    // Sync to Firestore if available
+    if (db) {
+      db.collection('devices').doc(dev.id).set({
+        pins: dev.pins,
+        lastSeen: dev.lastSeen,
+        status: dev.status,
+        rssi: dev.rssi,
+        ipAddress: dev.ipAddress
+      }, { merge: true }).catch(err => console.error(`Firestore sync error for ${dev.id}:`, err));
+    }
+
     // Real-time SSE update for this specific device
     broadcastSSE('device_updated', { deviceId: dev.id, device: dev });
   });
@@ -335,7 +361,12 @@ async function startServer() {
 
   // Health check
   app.get('/api/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', uptime: process.uptime(), time: new Date().toISOString() });
+    res.json({ 
+      status: 'ok', 
+      uptime: process.uptime(), 
+      time: new Date().toISOString(),
+      firebase: !!db
+    });
   });
 
   // Server-Sent Events (SSE) for Real-time browser updates
@@ -480,6 +511,24 @@ async function startServer() {
 
     // Evaluate automations
     evaluateAutomations(device);
+
+    // Sync state update to Firestore
+    if (db) {
+      db.collection('devices').doc(device.id).set({
+        pins: device.pins,
+        lastSeen: device.lastSeen,
+        status: device.status,
+        rssi: device.rssi,
+        ipAddress: device.ipAddress
+      }, { merge: true }).catch(err => console.error('Firestore update error:', err));
+      
+      // Log sensor data to historical logs
+      db.collection('sensor_logs').add({
+        deviceId: device.id,
+        pins: device.pins,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      }).catch(err => console.error('Firestore logging error:', err));
+    }
 
     // Create log message
     if (updatedPinsList.length > 0) {

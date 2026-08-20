@@ -14,6 +14,7 @@ import {
   Flame,
   Zap,
   Sliders,
+  Settings,
   Check
 } from 'lucide-react';
 
@@ -163,9 +164,9 @@ export const SmartSwitch: React.FC<SmartSwitchProps> = ({
           activeGlow: 'shadow-blue-500/40',
           activeBorder: 'border-blue-400',
           activeText: 'text-blue-500 dark:text-blue-400',
-          icon: <Sliders className={`w-5 h-5 transition-transform duration-300 ${isOn ? 'text-blue-400' : 'text-slate-400 dark:text-slate-500'}`} />,
-          labelOn: lang === 'km' ? 'ស្វ័យប្រវត្តិ (AUTO)' : 'Auto Mode ON',
-          labelOff: lang === 'km' ? 'បញ្ជាដោយផ្ទាល់ (MANUAL)' : 'Manual Mode',
+          icon: <Settings className={`w-5 h-5 transition-transform duration-300 ${isOn ? 'text-blue-400 animate-spin-slow' : 'text-slate-400 dark:text-slate-500'}`} />,
+          labelOn: lang === 'km' ? 'បើក (ON)' : 'ON',
+          labelOff: lang === 'km' ? 'បិទ (OFF)' : 'OFF',
         };
       case 'trash':
         return {
